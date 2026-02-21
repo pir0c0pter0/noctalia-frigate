@@ -9,18 +9,55 @@ Item {
     property ShellScreen screen
 
     readonly property var mainInst: pluginApi?.mainInstance ?? null
-    readonly property string streamUrl: mainInst?.streamUrl ?? ""
+    readonly property string snapshotBaseUrl: mainInst?.snapshotBaseUrl ?? ""
     readonly property string cameraName: mainInst?.currentCameraName ?? ""
     readonly property int cameraCount: mainInst?.selectedCameras?.length ?? 0
-    readonly property bool hasStream: streamUrl !== ""
+    readonly property bool hasSnapshot: snapshotBaseUrl !== ""
     readonly property bool isConnected: mainInst?.connectionStatus === "connected"
+
+    property bool streaming: false
+    property int frameCount: 0
+    property bool bufferFlip: false
 
     function tr(key) {
         return pluginApi?.tr(key) ?? key
     }
 
-    width: 640
-    height: 400
+    function stampedUrl() {
+        if (!snapshotBaseUrl) return ""
+        return snapshotBaseUrl + "?t=" + Date.now()
+    }
+
+    function startStreaming() {
+        if (!hasSnapshot) return
+        streaming = true
+        frameCount = 0
+        bufferFlip = false
+        bufferA.source = stampedUrl()
+    }
+
+    function stopStreaming() {
+        streaming = false
+        bufferA.source = ""
+        bufferB.source = ""
+    }
+
+    onSnapshotBaseUrlChanged: {
+        stopStreaming()
+        if (snapshotBaseUrl) startStreaming()
+    }
+
+    onVisibleChanged: {
+        if (visible && hasSnapshot) startStreaming()
+        else stopStreaming()
+    }
+
+    readonly property real screenHeight: screen?.height ?? 1080
+    readonly property real panelHeight: Math.round(screenHeight / 4)
+    readonly property real aspectRatio: 16 / 9
+
+    width: Math.round(panelHeight * aspectRatio)
+    height: panelHeight
 
     Rectangle {
         anchors.fill: parent
@@ -95,24 +132,69 @@ Item {
             }
         }
 
-        Image {
-            id: streamView
+        Item {
+            id: streamContainer
             anchors.top: header.bottom
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: debugLabel.top
             anchors.margins: 4
-            source: root.streamUrl
-            cache: false
-            fillMode: Image.PreserveAspectFit
 
-            onStatusChanged: {
-                if (status === Image.Ready) {
-                    statusLabel.text = ""
-                } else if (status === Image.Loading) {
-                    statusLabel.text = root.tr("loadingStream")
-                } else if (status === Image.Error) {
-                    statusLabel.text = root.isConnected ? root.tr("streamError") : root.tr("frigateOffline")
+            Image {
+                id: bufferA
+                anchors.fill: parent
+                cache: false
+                fillMode: Image.PreserveAspectFit
+                visible: !root.bufferFlip
+                asynchronous: true
+
+                onStatusChanged: {
+                    if (status === Image.Ready) {
+                        statusLabel.text = ""
+                        root.frameCount++
+                        if (root.streaming) {
+                            root.bufferFlip = false
+                            bufferB.source = root.stampedUrl()
+                        }
+                    } else if (status === Image.Error) {
+                        statusLabel.text = root.isConnected ? root.tr("streamError") : root.tr("frigateOffline")
+                        retryTimer.start()
+                    }
+                }
+            }
+
+            Image {
+                id: bufferB
+                anchors.fill: parent
+                cache: false
+                fillMode: Image.PreserveAspectFit
+                visible: root.bufferFlip
+                asynchronous: true
+
+                onStatusChanged: {
+                    if (status === Image.Ready) {
+                        statusLabel.text = ""
+                        root.frameCount++
+                        if (root.streaming) {
+                            root.bufferFlip = true
+                            bufferA.source = root.stampedUrl()
+                        }
+                    } else if (status === Image.Error) {
+                        statusLabel.text = root.isConnected ? root.tr("streamError") : root.tr("frigateOffline")
+                        retryTimer.start()
+                    }
+                }
+            }
+        }
+
+        Timer {
+            id: retryTimer
+            interval: 2000
+            repeat: false
+            onTriggered: {
+                if (root.streaming && root.hasSnapshot) {
+                    root.bufferFlip = false
+                    bufferA.source = root.stampedUrl()
                 }
             }
         }
@@ -121,7 +203,7 @@ Item {
             id: statusLabel
             anchors.centerIn: parent
             horizontalAlignment: Text.AlignHCenter
-            text: root.hasStream ? "" : root.tr("noCamerasConfigured")
+            text: root.hasSnapshot ? "" : root.tr("noCamerasConfigured")
             opacity: 0.5
             wrapMode: Text.Wrap
         }
@@ -132,7 +214,7 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.margins: 4
-            text: "URL: " + root.streamUrl
+            text: "FPS: ~" + root.frameCount + " frames | " + root.snapshotBaseUrl
             opacity: 0.3
             font.pixelSize: 10
             wrapMode: Text.Wrap

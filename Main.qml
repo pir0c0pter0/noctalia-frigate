@@ -22,7 +22,7 @@ Item {
         return selectedCameras[idx] ?? ""
     }
 
-    readonly property string streamUrl: buildAuthUrl("/api/" + currentCameraName + "?fps=5")
+    readonly property string snapshotBaseUrl: buildAuthUrl("/api/" + currentCameraName + "/latest.jpg")
 
     signal camerasLoaded(var cameras)
     signal testCompleted(string status, string message)
