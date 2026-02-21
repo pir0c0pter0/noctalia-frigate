@@ -1,0 +1,29 @@
+{
+  "id": "noctalia-frigate",
+  "name": "Frigate Viewer",
+  "version": "1.0.0",
+  "minNoctaliaVersion": "4.4.0",
+  "author": "pir0c0pter0",
+  "license": "MIT",
+  "repository": "https://github.com/pir0c0pter0/noctalia-frigate",
+  "description": "Live camera viewer for Frigate NVR",
+  "tags": ["Bar", "Panel"],
+  "entryPoints": {
+    "main": "Main.qml",
+    "barWidget": "BarWidget.qml",
+    "panel": "Panel.qml",
+    "settings": "Settings.qml"
+  },
+  "dependencies": {
+    "plugins": []
+  },
+  "metadata": {
+    "defaultSettings": {
+      "frigateUrl": "",
+      "username": "",
+      "password": "",
+      "selectedCameras": [],
+      "cameraOrder": []
+    }
+  }
+}

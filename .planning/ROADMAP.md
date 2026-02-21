@@ -12,12 +12,12 @@ Six dependency-driven phases take the plugin from a bare registered skeleton to 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Plugin Skeleton + MJPEG Spike** - Register plugin, open/close panel, validate MJPEG streaming on target platform
-- [ ] **Phase 2: Settings UI + Auth Model** - Settings form with URL/credentials, persistence, URL-embedded Basic Auth locked in
-- [ ] **Phase 3: Frigate API + Connection Core** - Test Connection, List Cameras, status polling, streamUrl computation in Main.qml
-- [ ] **Phase 4: MJPEG Viewer Panel** - Live stream display, camera name header, prev/next navigation, stream lifecycle management
-- [ ] **Phase 5: Camera Selection** - Camera checkbox list in settings, order persistence, empty state handling
-- [ ] **Phase 6: Polish + i18n** - All UI strings in en/pt, all error states, theme compliance audit
+- [x] **Phase 1: Plugin Skeleton + MJPEG Spike** - Register plugin, open/close panel, validate MJPEG streaming on target platform
+- [x] **Phase 2: Settings UI + Auth Model** - Settings form with URL/credentials, persistence, URL-embedded Basic Auth locked in
+- [x] **Phase 3: Frigate API + Connection Core** - Test Connection, List Cameras, status polling, streamUrl computation in Main.qml
+- [x] **Phase 4: MJPEG Viewer Panel** - Live stream display, camera name header, prev/next navigation, stream lifecycle management
+- [x] **Phase 5: Camera Selection** - Camera checkbox list in settings, order persistence, empty state handling
+- [x] **Phase 6: Polish + i18n** - All UI strings in en/pt, all error states, theme compliance audit
 
 ## Phase Details
 
@@ -33,8 +33,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Plugin scaffold + BarWidget (manifest.json, Main.qml, BarWidget.qml with CCTV icon + panel toggle, Panel.qml stub, Settings.qml stub)
-- [ ] 01-02-PLAN.md — MJPEG spike + verification (Image component spike in Panel.qml, human-verify checkpoint, spike result documentation)
+- [x] 01-01-PLAN.md — Plugin scaffold + BarWidget (manifest.json, Main.qml, BarWidget.qml with CCTV icon + panel toggle, Panel.qml stub, Settings.qml stub)
+- [x] 01-02-PLAN.md — MJPEG spike + verification (Image component spike in Panel.qml, human-verify checkpoint, spike result documentation) — **MJPEG GO**
 
 ### Phase 2: Settings UI + Auth Model
 **Goal**: Users can configure the Frigate server URL and optional credentials, settings survive restarts, and the Basic Auth URL-embedding strategy is established for all downstream components
@@ -124,9 +124,9 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Plugin Skeleton + MJPEG Spike | 0/2 | Planned | - |
-| 2. Settings UI + Auth Model | 0/3 | Not started | - |
-| 3. Frigate API + Connection Core | 0/3 | Not started | - |
-| 4. MJPEG Viewer Panel | 0/3 | Not started | - |
-| 5. Camera Selection | 0/3 | Not started | - |
-| 6. Polish + i18n | 0/3 | Not started | - |
+| 1. Plugin Skeleton + MJPEG Spike | 2/2 | Complete | 2026-02-21 |
+| 2. Settings UI + Auth Model | 3/3 | Complete | 2026-02-21 |
+| 3. Frigate API + Connection Core | 3/3 | Complete | 2026-02-21 |
+| 4. MJPEG Viewer Panel | 3/3 | Complete | 2026-02-21 |
+| 5. Camera Selection | 3/3 | Complete | 2026-02-21 |
+| 6. Polish + i18n | 3/3 | Complete | 2026-02-21 |
