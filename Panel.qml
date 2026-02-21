@@ -14,7 +14,6 @@ Item {
     readonly property int cameraCount: mainInst?.selectedCameras?.length ?? 0
     readonly property bool hasStream: streamUrl !== ""
     readonly property bool isConnected: mainInst?.connectionStatus === "connected"
-    property bool streamError: false
 
     function tr(key) {
         return pluginApi?.tr(key) ?? key
@@ -22,18 +21,6 @@ Item {
 
     width: 640
     height: 400
-
-    onVisibleChanged: {
-        if (visible) {
-            streamError = false
-            if (hasStream) {
-                streamView.source = ""
-                reconnectTimer.start()
-            }
-        } else {
-            streamView.source = ""
-        }
-    }
 
     Rectangle {
         anchors.fill: parent
@@ -113,72 +100,42 @@ Item {
             anchors.top: header.bottom
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.bottom: parent.bottom
+            anchors.bottom: debugLabel.top
             anchors.margins: 4
-            source: root.hasStream ? root.streamUrl : ""
+            source: root.streamUrl
             cache: false
             fillMode: Image.PreserveAspectFit
-            visible: root.hasStream && !root.streamError
 
             onStatusChanged: {
                 if (status === Image.Ready) {
-                    loadingIndicator.visible = false
-                    root.streamError = false
+                    statusLabel.text = ""
                 } else if (status === Image.Loading) {
-                    loadingIndicator.visible = true
-                    root.streamError = false
+                    statusLabel.text = root.tr("loadingStream")
                 } else if (status === Image.Error) {
-                    loadingIndicator.visible = false
-                    root.streamError = true
+                    statusLabel.text = root.isConnected ? root.tr("streamError") : root.tr("frigateOffline")
                 }
             }
         }
 
         NText {
-            id: loadingIndicator
+            id: statusLabel
             anchors.centerIn: parent
-            text: root.tr("loadingStream")
-            opacity: 0.5
-            visible: false
-        }
-
-        Column {
-            anchors.centerIn: parent
-            spacing: Style.marginS
-            visible: root.streamError && root.hasStream
-
-            NIcon {
-                anchors.horizontalCenter: parent.horizontalCenter
-                icon: "alert-triangle"
-                opacity: 0.5
-            }
-
-            NText {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: root.isConnected ? root.tr("streamError") : root.tr("frigateOffline")
-                horizontalAlignment: Text.AlignHCenter
-                opacity: 0.5
-                wrapMode: Text.Wrap
-            }
-        }
-
-        NText {
-            anchors.centerIn: parent
-            text: root.tr("noCamerasConfigured")
             horizontalAlignment: Text.AlignHCenter
+            text: root.hasStream ? "" : root.tr("noCamerasConfigured")
             opacity: 0.5
-            visible: !root.hasStream && !loadingIndicator.visible && !root.streamError
             wrapMode: Text.Wrap
         }
 
-        Timer {
-            id: reconnectTimer
-            interval: 200
-            onTriggered: {
-                if (root.hasStream) {
-                    streamView.source = root.streamUrl
-                }
-            }
+        NText {
+            id: debugLabel
+            anchors.bottom: parent.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.margins: 4
+            text: "URL: " + root.streamUrl
+            opacity: 0.3
+            font.pixelSize: 10
+            wrapMode: Text.Wrap
         }
     }
 }
