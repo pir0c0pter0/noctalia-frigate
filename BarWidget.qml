@@ -27,6 +27,34 @@ Item {
     implicitWidth: visualCapsule.width
     implicitHeight: visualCapsule.height
 
+    NPopupContextMenu {
+        id: contextMenu
+
+        model: [
+            {
+                "label": pluginApi?.tr("testConnection") ?? "Test Connection",
+                "action": "test",
+                "icon": "plug-connected"
+            },
+            {
+                "label": pluginApi?.tr("settings") ?? "Settings",
+                "action": "settings",
+                "icon": "settings"
+            }
+        ]
+
+        onTriggered: action => {
+            contextMenu.close()
+            PanelService.closeContextMenu(root.screen)
+
+            if (action === "test") {
+                if (mainInst) mainInst.testConnection()
+            } else if (action === "settings") {
+                BarService.openPluginSettings(root.screen, pluginApi.manifest)
+            }
+        }
+    }
+
     Rectangle {
         id: visualCapsule
         anchors.centerIn: parent
@@ -60,10 +88,13 @@ Item {
         id: mouseArea
         anchors.fill: parent
         hoverEnabled: true
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: Qt.PointingHandCursor
 
-        onClicked: {
-            if (pluginApi) {
+        onClicked: mouse => {
+            if (mouse.button === Qt.RightButton) {
+                PanelService.showContextMenu(contextMenu, root, root.screen)
+            } else if (pluginApi) {
                 pluginApi.togglePanel(root.screen, root)
             }
         }
