@@ -60,7 +60,7 @@ Item {
 
                 NIcon {
                     anchors.centerIn: parent
-                    name: "chevron-left"
+                    icon: "chevron-left"
                 }
 
                 MouseArea {
@@ -93,7 +93,7 @@ Item {
 
                 NIcon {
                     anchors.centerIn: parent
-                    name: "chevron-right"
+                    icon: "chevron-right"
                 }
 
                 MouseArea {
@@ -149,7 +149,7 @@ Item {
 
             NIcon {
                 anchors.horizontalCenter: parent.horizontalCenter
-                name: "alert-triangle"
+                icon: "alert-triangle"
                 opacity: 0.5
             }
 
