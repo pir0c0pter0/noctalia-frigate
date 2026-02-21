@@ -30,12 +30,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Clicking the bar icon opens the floating panel; clicking again (or closing) dismisses it
   3. A hardcoded MJPEG stream URL displays a live video frame in the panel (spike validates QML Image handles multipart/x-mixed-replace)
   4. The spike result (MJPEG go/no-go) is documented so Phase 4 can proceed without re-investigation
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 01-01: Scaffold plugin file structure (manifest.json, Main.qml, BarWidget.qml, Panel.qml, Settings.qml stubs)
-- [ ] 01-02: Wire bar icon click to panel open/close via pluginApi.mainInstance
-- [ ] 01-03: MJPEG spike — hardcoded stream URL in Panel.qml, validate continuous display and source="" reconnect
+- [ ] 01-01-PLAN.md — Plugin scaffold + BarWidget (manifest.json, Main.qml, BarWidget.qml with CCTV icon + panel toggle, Panel.qml stub, Settings.qml stub)
+- [ ] 01-02-PLAN.md — MJPEG spike + verification (Image component spike in Panel.qml, human-verify checkpoint, spike result documentation)
 
 ### Phase 2: Settings UI + Auth Model
 **Goal**: Users can configure the Frigate server URL and optional credentials, settings survive restarts, and the Basic Auth URL-embedding strategy is established for all downstream components
@@ -125,7 +124,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Plugin Skeleton + MJPEG Spike | 0/3 | Not started | - |
+| 1. Plugin Skeleton + MJPEG Spike | 0/2 | Planned | - |
 | 2. Settings UI + Auth Model | 0/3 | Not started | - |
 | 3. Frigate API + Connection Core | 0/3 | Not started | - |
 | 4. MJPEG Viewer Panel | 0/3 | Not started | - |
