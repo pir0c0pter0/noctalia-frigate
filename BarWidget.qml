@@ -39,7 +39,7 @@ Item {
 
         NIcon {
             anchors.centerIn: parent
-            name: "camera-cctv"
+            icon: "camera-cctv"
             opacity: root.isPanelOpen ? 1.0 : 0.7
         }
 
