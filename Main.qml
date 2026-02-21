@@ -57,10 +57,11 @@ Item {
         xhr.onreadystatechange = function() {
             if (xhr.readyState === XMLHttpRequest.DONE) {
                 if (xhr.status >= 200 && xhr.status < 300) {
+                    var text = xhr.responseText
                     try {
-                        callback(null, JSON.parse(xhr.responseText), xhr.status)
+                        callback(null, JSON.parse(text), xhr.status)
                     } catch (e) {
-                        callback("JSON parse error: " + e.message, null, xhr.status)
+                        callback(null, text, xhr.status)
                     }
                 } else if (xhr.status === 401) {
                     callback("Authentication failed (401). Check your username and password. Note: Frigate's native JWT auth (port 8971) is not supported \u2014 use port 5000 or a reverse proxy with Basic Auth.", null, 401)
