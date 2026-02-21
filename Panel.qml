@@ -52,12 +52,9 @@ Item {
         else stopStreaming()
     }
 
-    readonly property real screenHeight: screen?.height ?? 1080
-    readonly property real panelHeight: Math.round(screenHeight / 4)
-    readonly property real aspectRatio: 16 / 9
-
-    width: Math.round(panelHeight * aspectRatio)
-    height: panelHeight
+    property real contentPreferredWidth: 480 * Style.uiScaleRatio
+    property real contentPreferredHeight: 310 * Style.uiScaleRatio
+    anchors.fill: parent
 
     Rectangle {
         anchors.fill: parent
@@ -214,7 +211,7 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.margins: 4
-            text: "FPS: ~" + root.frameCount + " frames | " + root.snapshotBaseUrl
+            text: root.cameraName + " | " + root.frameCount + " frames"
             opacity: 0.3
             font.pixelSize: 10
             wrapMode: Text.Wrap
