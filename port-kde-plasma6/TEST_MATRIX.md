@@ -14,6 +14,7 @@
 | T08 | Fechar painel para stream | `StreamView.active` + `stopStreaming()` | Coberto |
 | T09 | Persistencia apos reinicio | `main.xml` + `cfg_*` | Coberto |
 | T10 | EN/PT funcionando | `I18n.js` | Coberto |
+| T11 | Integracao HA WebSocket e troca auto | `main.qml:haSocket` | Coberto |
 
 ## Validacoes executadas neste ambiente
 

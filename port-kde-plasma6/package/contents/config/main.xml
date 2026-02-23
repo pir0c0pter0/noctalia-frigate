@@ -21,5 +21,14 @@
     <entry name="cameraOrder" type="StringList">
       <default></default>
     </entry>
+    <entry name="haUrl" type="String">
+      <default>ws://192.168.31.190:8123/api/websocket</default>
+    </entry>
+    <entry name="haToken" type="String">
+      <default></default>
+    </entry>
+    <entry name="enableHaIntegration" type="Bool">
+      <default>false</default>
+    </entry>
   </group>
 </kcfg>

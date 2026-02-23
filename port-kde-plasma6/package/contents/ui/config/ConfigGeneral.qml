@@ -16,11 +16,17 @@ Item {
     property alias cfg_frigateUrl: urlField.text
     property alias cfg_username: userField.text
     property alias cfg_password: passField.text
+    property alias cfg_haUrl: haUrlField.text
+    property alias cfg_haToken: haTokenField.text
+    property alias cfg_enableHaIntegration: haEnableCheck.checked
     property var cfg_selectedCameras: []
     property var cfg_cameraOrder: []
     property string cfg_frigateUrlDefault: ""
     property string cfg_usernameDefault: ""
     property string cfg_passwordDefault: ""
+    property string cfg_haUrlDefault: "ws://192.168.31.190:8123/api/websocket"
+    property string cfg_haTokenDefault: ""
+    property bool cfg_enableHaIntegrationDefault: false
     property var cfg_selectedCamerasDefault: []
     property var cfg_cameraOrderDefault: []
     property int cfg_length: 0
@@ -67,6 +73,9 @@ Item {
         Plasmoid.configuration.frigateUrl = cfg_frigateUrl
         Plasmoid.configuration.username = cfg_username
         Plasmoid.configuration.password = cfg_password
+        Plasmoid.configuration.haUrl = cfg_haUrl
+        Plasmoid.configuration.haToken = cfg_haToken
+        Plasmoid.configuration.enableHaIntegration = cfg_enableHaIntegration
         Plasmoid.configuration.selectedCameras = cfg_selectedCameras
         Plasmoid.configuration.cameraOrder = cfg_cameraOrder
 
@@ -361,6 +370,42 @@ Item {
             text: root.tr("camerasSelected", { count: FrigateApi.toStringArray(root.cfg_selectedCameras).length })
             visible: cameraRepeater.count > 0
             opacity: 0.7
+        }
+
+        Kirigami.Separator {
+            Layout.fillWidth: true
+        }
+
+        Kirigami.Heading {
+            text: "Home Assistant"
+            level: 3
+        }
+
+        Kirigami.FormLayout {
+            Layout.fillWidth: true
+
+            QQC2.CheckBox {
+                id: haEnableCheck
+                Kirigami.FormData.label: root.tr("enableHaDetection") + ":"
+                text: root.tr("haEnable")
+            }
+
+            QQC2.TextField {
+                id: haUrlField
+                Kirigami.FormData.label: root.tr("haWsUrl") + ":"
+                Layout.fillWidth: true
+                placeholderText: "ws://192.168.31.190:8123/api/websocket"
+                enabled: haEnableCheck.checked
+            }
+
+            QQC2.TextField {
+                id: haTokenField
+                Kirigami.FormData.label: root.tr("haToken") + ":"
+                Layout.fillWidth: true
+                placeholderText: root.tr("haTokenPlaceholder")
+                echoMode: TextInput.Password
+                enabled: haEnableCheck.checked
+            }
         }
 
         Kirigami.Separator {

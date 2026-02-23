@@ -40,7 +40,12 @@ var STRINGS = {
         about: "About",
         developedBy: "Developed by pir0c0pter0",
         version: "Version {version}",
-        applyCloseHint: "Tip: use Apply/OK to persist configuration in Plasma dialogs."
+        applyCloseHint: "Tip: use Apply/OK to persist configuration in Plasma dialogs.",
+        enableHaDetection: "Enable Home Assistant Detection",
+        haEnable: "Enable",
+        haWsUrl: "HA WebSocket URL",
+        haToken: "HA Access Token",
+        haTokenPlaceholder: "Paste your Long-Lived Access Token"
     },
     pt: {
         frigateViewerTitle: "Visualizador Frigate",
@@ -81,7 +86,12 @@ var STRINGS = {
         about: "Sobre",
         developedBy: "Desenvolvido por pir0c0pter0",
         version: "Versao {version}",
-        applyCloseHint: "Dica: use Aplicar/OK para persistir configuracoes no Plasma."
+        applyCloseHint: "Dica: use Aplicar/OK para persistir configuracoes no Plasma.",
+        enableHaDetection: "Ativar Deteccao do Home Assistant",
+        haEnable: "Ativar",
+        haWsUrl: "URL WebSocket do HA",
+        haToken: "Token de Acesso do HA",
+        haTokenPlaceholder: "Cole seu Token de Acesso de Longa Duracao"
     }
 }
 

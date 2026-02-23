@@ -1,4 +1,5 @@
 import QtQuick
+import QtWebSockets
 
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.plasmoid
@@ -14,6 +15,10 @@ PlasmoidItem {
     readonly property string frigateUrl: FrigateApi.normalizeBaseUrl(Plasmoid.configuration.frigateUrl || "")
     readonly property string username: String(Plasmoid.configuration.username || "")
     readonly property string password: String(Plasmoid.configuration.password || "")
+
+    readonly property string haUrl: Plasmoid.configuration.haUrl || "ws://192.168.31.190:8123/api/websocket"
+    readonly property string haToken: Plasmoid.configuration.haToken || ""
+    readonly property bool enableHaIntegration: !!Plasmoid.configuration.enableHaIntegration
 
     readonly property var effectiveSelectedCameras: FrigateApi.orderedSelection(
         FrigateApi.toStringArray(Plasmoid.configuration.selectedCameras),
@@ -294,6 +299,70 @@ PlasmoidItem {
             return
         }
         currentIndex = (currentIndex - 1 + count) % count
+    }
+
+    function switchToCamera(cameraName) {
+        var list = effectiveSelectedCameras
+        var target = String(cameraName).toLowerCase()
+        
+        for (var i = 0; i < list.length; i++) {
+            var current = String(list[i]).toLowerCase()
+            if (current === target || target.indexOf(current) !== -1 || current.indexOf(target) !== -1) {
+                currentIndex = i
+                return true
+            }
+        }
+        return false
+    }
+
+    WebSocket {
+        id: haSocket
+        url: root.haUrl
+        active: root.enableHaIntegration && root.haToken !== ""
+        onTextMessageReceived: function(message) {
+            var data = JSON.parse(message)
+            if (data.type === "auth_required") {
+                haSocket.sendTextMessage(JSON.stringify({
+                    "type": "auth",
+                    "access_token": root.haToken
+                }))
+            } else if (data.type === "auth_ok") {
+                haSocket.sendTextMessage(JSON.stringify({
+                    "id": 1,
+                    "type": "subscribe_events",
+                    "event_type": "reolink_person_detected"
+                }))
+            } else if (data.type === "event" && data.event && data.event.event_type === "reolink_person_detected") {
+                var eventData = data.event.data
+                console.log("Person detected event received:", JSON.stringify(eventData))
+                var cameraName = eventData.camera || eventData.camera_name || eventData.camera_id
+                if (cameraName) {
+                    if (root.switchToCamera(cameraName)) {
+                        console.log("Expanding widget for camera:", cameraName)
+                        root.expanded = true
+                        Plasmoid.expanded = true
+                    }
+                }
+            }
+        }
+        onStatusChanged: {
+            if (haSocket.status === WebSocket.Error) {
+                console.error("HA WebSocket Error:", haSocket.errorString)
+            } else if (haSocket.status === WebSocket.Open) {
+                console.log("HA WebSocket Connected")
+            } else if (haSocket.status === WebSocket.Closed) {
+                console.log("HA WebSocket Closed")
+            }
+        }
+    }
+
+    // Auto-reconnect logic
+    Timer {
+        id: haReconnectTimer
+        interval: 5000
+        running: haSocket.status === WebSocket.Closed && root.enableHaIntegration
+        repeat: false
+        onTriggered: haSocket.active = true
     }
 
     Timer {
