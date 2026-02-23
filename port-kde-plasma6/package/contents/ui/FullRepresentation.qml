@@ -17,7 +17,7 @@ PlasmaExtras.Representation {
     readonly property int cameraCount: root.plasmoidItem.effectiveSelectedCameras.length
     readonly property string cameraName: root.plasmoidItem.currentCameraName
     readonly property bool connected: root.plasmoidItem.connectionStatus === "connected"
-    readonly property string modeChipText: streamView.liveMode ? root.plasmoidItem.tr("liveModeChip") : root.plasmoidItem.tr("previewModeChip")
+    readonly property string modeChipText: streamView.modeChipText
     readonly property int streamMargin: Kirigami.Units.smallSpacing
     readonly property int baseMinWidth: Math.round(Kirigami.Units.gridUnit * 24)
     readonly property int baseMinHeight: Math.round(Kirigami.Units.gridUnit * 16)
@@ -82,7 +82,7 @@ PlasmaExtras.Representation {
                 PlasmaComponents3.Label {
                     Layout.fillWidth: true
                     horizontalAlignment: Text.AlignHCenter
-                    text: root.cameraName || root.plasmoidItem.tr("noCameraSelected")
+                    text: root.cameraName || i18n("No camera selected")
                     elide: Text.ElideRight
                     opacity: root.cameraName ? 1.0 : 0.65
                     font.pointSize: Kirigami.Theme.defaultFont.pointSize + 1
@@ -133,8 +133,8 @@ PlasmaExtras.Representation {
 
                         PlasmaComponents3.Label {
                             text: root.connected
-                                ? root.plasmoidItem.tr("tooltipConnected")
-                                : root.plasmoidItem.tr("tooltipDisconnected")
+                                ? i18n("Connected")
+                                : i18n("Disconnected")
                             font.pointSize: Kirigami.Theme.smallFont.pointSize
                             font.weight: Font.Medium
                         }
@@ -202,12 +202,6 @@ PlasmaExtras.Representation {
                     cameraName: root.cameraName
                     connected: root.connected
                     active: root.plasmoidItem.expanded
-                    noCameraText: root.plasmoidItem.tr("noCamerasConfigured")
-                    loadingStreamText: root.plasmoidItem.tr("loadingStream")
-                    streamErrorText: root.plasmoidItem.tr("streamError")
-                    offlineText: root.plasmoidItem.tr("frigateOffline")
-                    previewHintText: root.plasmoidItem.tr("previewHint")
-                    liveHintText: root.plasmoidItem.tr("liveHint")
                 }
             }
 
@@ -215,10 +209,14 @@ PlasmaExtras.Representation {
                 id: footerLabel
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
-                text: root.cameraName.length > 0
-                    ? root.cameraName + " | " + streamView.frameCount + " frames"
-                    : ""
-                visible: text.length > 0
+                text: {
+                    if (!root.cameraName) return "";
+                    if (streamView.liveMode) {
+                        return root.cameraName + " | " + i18n("Live MJPEG Stream");
+                    }
+                    return root.cameraName + " | " + i18np("%1 frame", "%1 frames", streamView.frameCount);
+                }
+                visible: root.cameraName.length > 0
                 opacity: 0.58
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
             }

@@ -11,12 +11,6 @@ Item {
     required property string cameraName
     required property bool connected
     required property bool active
-    required property string noCameraText
-    required property string loadingStreamText
-    required property string streamErrorText
-    required property string offlineText
-    required property string previewHintText
-    required property string liveHintText
 
     property bool streaming: false
     property bool liveMode: false
@@ -24,15 +18,17 @@ Item {
     property bool nextBufferIsA: true
     property bool waitingFrame: false
     property int frameCount: 0
-    property string statusText: noCameraText
+    property string statusText: i18n("No cameras configured. Open settings and list cameras.")
     property var cameraAspectRatios: ({})
     readonly property int previewIntervalMs: 1000
-    readonly property int liveIntervalMs: 180
+
+    readonly property string modeChipText: liveMode ? i18n("Live MJPEG") : i18n("Preview 1 FPS")
+
     readonly property string interactionHint: {
         if (!streaming || !snapshotBaseUrl || statusText.length > 0) {
             return ""
         }
-        return liveMode ? liveHintText : previewHintText
+        return liveMode ? i18n("Live mode active. Click the image to return to preview.") : i18n("Preview mode (1 fps). Click the image for live mode.")
     }
 
     readonly property real defaultAspectRatio: 16 / 9
@@ -124,17 +120,21 @@ Item {
     }
 
     function scheduleNextFrame() {
-        if (!streaming || !snapshotBaseUrl) {
+        if (!streaming || !snapshotBaseUrl || liveMode) {
             frameTimer.stop()
             return
         }
 
-        frameTimer.interval = liveMode ? liveIntervalMs : previewIntervalMs
+        frameTimer.interval = previewIntervalMs
         frameTimer.restart()
     }
 
     function requestNextFrame() {
-        if (!streaming || !snapshotBaseUrl || waitingFrame) {
+        if (!streaming || !snapshotBaseUrl || waitingFrame || liveMode) {
+            if (liveMode) {
+                console.log("Blocking snapshot request because liveMode is active.")
+                frameTimer.stop()
+            }
             return
         }
 
@@ -152,23 +152,37 @@ Item {
     }
 
     function handleFrameReady(imageItem, loadedBufferIsA) {
-        if (!streaming) {
+        if (!streaming) return
+        
+        if (liveMode) {
+            if (imageItem === bufferA || imageItem === bufferB) {
+                console.log("Discarding snapshot frame because liveMode is active.")
+                imageItem.source = ""
+            }
             return
         }
 
         updateAspectRatio(imageItem)
-        statusText = ""
-        frameCount = frameCount + 1
-        waitingFrame = false
-        bufferFlip = !loadedBufferIsA
-        nextBufferIsA = !loadedBufferIsA
-        scheduleNextFrame()
+        
+        // Only count frames and schedule next if we are in snapshot mode
+        // and the frame is coming from one of the snapshot buffers.
+        if (imageItem === bufferA || imageItem === bufferB) {
+            statusText = ""
+            frameCount = frameCount + 1
+            waitingFrame = false
+            bufferFlip = !loadedBufferIsA
+            nextBufferIsA = !loadedBufferIsA
+            scheduleNextFrame()
+        }
     }
 
     function handleFrameError() {
+        if (!streaming) return
         waitingFrame = false
-        statusText = connected ? streamErrorText : offlineText
-        retryTimer.restart()
+        statusText = connected ? i18n("Stream unavailable. Check your connection.") : i18n("Frigate is offline. Check server status and settings.")
+        if (!liveMode) {
+            retryTimer.restart()
+        }
     }
 
     function toggleLiveMode() {
@@ -177,7 +191,20 @@ Item {
         }
 
         liveMode = !liveMode
-        scheduleNextFrame()
+        console.log("Toggle Live Mode:", liveMode)
+        
+        if (liveMode) {
+            frameTimer.stop()
+            retryTimer.stop()
+            bufferA.source = ""
+            bufferB.source = ""
+            waitingFrame = false
+            liveStreamImage.source = streamBaseUrl
+        } else {
+            liveStreamImage.source = ""
+            frameCount = 0
+            requestNextFrame()
+        }
     }
 
     function startStreaming() {
@@ -193,6 +220,7 @@ Item {
         waitingFrame = false
         frameCount = 0
         statusText = ""
+        liveStreamImage.source = ""
         frameTimer.stop()
         retryTimer.stop()
         requestNextFrame()
@@ -206,7 +234,8 @@ Item {
         retryTimer.stop()
         bufferA.source = ""
         bufferB.source = ""
-        statusText = snapshotBaseUrl ? "" : noCameraText
+        liveStreamImage.source = ""
+        statusText = snapshotBaseUrl ? "" : i18n("No cameras configured. Open settings and list cameras.")
     }
 
     onSnapshotBaseUrlChanged: {
@@ -231,12 +260,29 @@ Item {
     }
 
     Image {
+        id: liveStreamImage
+        anchors.fill: parent
+        cache: false
+        asynchronous: true
+        fillMode: Image.PreserveAspectFit
+        visible: root.liveMode
+
+        onStatusChanged: {
+            if (status === Image.Ready) {
+                root.handleFrameReady(liveStreamImage, false)
+            } else if (status === Image.Error) {
+                root.handleFrameError()
+            }
+        }
+    }
+
+    Image {
         id: bufferA
         anchors.fill: parent
         cache: false
         asynchronous: true
         fillMode: Image.PreserveAspectFit
-        visible: !root.bufferFlip
+        visible: !root.bufferFlip && !root.liveMode
 
         onStatusChanged: {
             if (status === Image.Ready) {
@@ -253,7 +299,7 @@ Item {
         cache: false
         asynchronous: true
         fillMode: Image.PreserveAspectFit
-        visible: root.bufferFlip
+        visible: root.bufferFlip && !root.liveMode
 
         onStatusChanged: {
             if (status === Image.Ready) {

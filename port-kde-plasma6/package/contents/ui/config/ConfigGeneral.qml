@@ -6,7 +6,6 @@ import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasmoid
 
 import "../code/FrigateApi.js" as FrigateApi
-import "../code/I18n.js" as I18n
 
 Item {
     id: root
@@ -24,26 +23,18 @@ Item {
     property string cfg_frigateUrlDefault: ""
     property string cfg_usernameDefault: ""
     property string cfg_passwordDefault: ""
-    property string cfg_haUrlDefault: "ws://192.168.31.190:8123/api/websocket"
+    property string cfg_haUrlDefault: ""
     property string cfg_haTokenDefault: ""
     property bool cfg_enableHaIntegrationDefault: false
     property var cfg_selectedCamerasDefault: []
     property var cfg_cameraOrderDefault: []
-    property int cfg_length: 0
-    property bool cfg_expanding: false
 
     property var discoveredCameras: []
     property string testResultMessage: ""
     property string testResultStatus: ""
     property string saveStatus: ""
 
-    readonly property string localeName: Qt.locale().name
-
     signal configurationChanged
-
-    function tr(key, params) {
-        return I18n.tr(localeName, key, params || {})
-    }
 
     function saveConfig() {
         cfg_frigateUrl = FrigateApi.normalizeBaseUrl(cfg_frigateUrl)
@@ -79,7 +70,7 @@ Item {
         Plasmoid.configuration.selectedCameras = cfg_selectedCameras
         Plasmoid.configuration.cameraOrder = cfg_cameraOrder
 
-        saveStatus = tr("saved")
+        saveStatus = i18n("Saved!")
         saveStatusTimer.restart()
         configurationChanged()
     }
@@ -104,23 +95,20 @@ Item {
             }
 
             if (xhr.status === 401) {
-                callback(tr("authFailed"), null, 401)
+                callback(i18n("Authentication failed (401). Check credentials."), null, 401)
                 return
             }
 
             if (xhr.status === 0) {
-                callback(tr("cannotReachServer"), null, 0)
+                callback(i18n("Cannot reach server. Check URL and whether Frigate is running."), null, 0)
                 return
             }
 
-            callback(tr("httpError", {
-                status: xhr.status,
-                statusText: xhr.statusText || "Unknown"
-            }), null, xhr.status)
+            callback(i18n("HTTP %1: %2", xhr.status, xhr.statusText || "Unknown"), null, xhr.status)
         }
 
         xhr.ontimeout = function() {
-            callback(tr("cannotReachServer"), null, 0)
+            callback(i18n("Cannot reach server. Check URL and whether Frigate is running."), null, 0)
         }
 
         xhr.open("GET", url, true)
@@ -140,12 +128,12 @@ Item {
 
         if (!baseUrl) {
             testResultStatus = "error"
-            testResultMessage = tr("noUrlConfigured")
+            testResultMessage = i18n("No Frigate URL configured")
             return
         }
 
         testResultStatus = "testing"
-        testResultMessage = tr("testing")
+        testResultMessage = i18n("Testing...")
 
         var user = String(cfg_username || "")
         var pass = String(cfg_password || "")
@@ -165,7 +153,7 @@ Item {
             }
 
             testResultStatus = "ok"
-            testResultMessage = tr("connectedVersion", { version: version })
+            testResultMessage = i18n("Connected! Frigate v%1", version)
         })
     }
 
@@ -175,7 +163,7 @@ Item {
 
         if (!baseUrl) {
             testResultStatus = "error"
-            testResultMessage = tr("noUrlConfigured")
+            testResultMessage = i18n("No Frigate URL configured")
             return
         }
 
@@ -185,7 +173,7 @@ Item {
         makeAuthRequest(baseUrl + "/api/config", user, pass, function(err, data) {
             if (err) {
                 testResultStatus = "error"
-                testResultMessage = tr("fetchCamerasFailed", { error: err })
+                testResultMessage = i18n("Failed to fetch cameras: %1", err)
                 return
             }
 
@@ -230,7 +218,7 @@ Item {
         spacing: Kirigami.Units.smallSpacing
 
         Kirigami.Heading {
-            text: root.tr("frigateConnection")
+            text: i18n("Frigate Connection")
             level: 3
         }
 
@@ -239,7 +227,7 @@ Item {
 
             QQC2.TextField {
                 id: urlField
-                Kirigami.FormData.label: root.tr("frigateServerUrl") + ":"
+                Kirigami.FormData.label: i18n("Frigate Server URL") + ":"
                 Layout.fillWidth: true
                 placeholderText: "http://192.168.1.100:5000"
                 inputMethodHints: Qt.ImhUrlCharactersOnly
@@ -247,17 +235,17 @@ Item {
 
             QQC2.TextField {
                 id: userField
-                Kirigami.FormData.label: root.tr("usernameOptional") + ":"
+                Kirigami.FormData.label: i18n("Username (optional)") + ":"
                 Layout.fillWidth: true
-                placeholderText: root.tr("leaveBlankIfNoAuth")
+                placeholderText: i18n("Leave blank if no auth")
                 inputMethodHints: Qt.ImhNoPredictiveText
             }
 
             QQC2.TextField {
                 id: passField
-                Kirigami.FormData.label: root.tr("passwordOptional") + ":"
+                Kirigami.FormData.label: i18n("Password (optional)") + ":"
                 Layout.fillWidth: true
-                placeholderText: root.tr("leaveBlankIfNoAuth")
+                placeholderText: i18n("Leave blank if no auth")
                 echoMode: TextInput.Password
                 inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText
             }
@@ -268,13 +256,13 @@ Item {
             spacing: Kirigami.Units.smallSpacing
 
             QQC2.Button {
-                text: root.tr("save")
+                text: i18n("Save")
                 icon.name: "document-save"
                 onClicked: root.applySettingsNow()
             }
 
             QQC2.Button {
-                text: root.tr("testConnection")
+                text: i18n("Test Connection")
                 icon.name: "network-connect"
                 onClicked: {
                     root.applySettingsNow()
@@ -283,7 +271,7 @@ Item {
             }
 
             QQC2.Button {
-                text: root.tr("listCameras")
+                text: i18n("List Cameras")
                 icon.name: "view-list-details"
                 onClicked: {
                     root.applySettingsNow()
@@ -318,7 +306,7 @@ Item {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             opacity: 0.75
-            text: root.tr("credentialsWarning")
+            text: i18n("Credentials are stored locally. Prefer a dedicated Frigate user with limited permissions.")
         }
 
         Kirigami.Separator {
@@ -326,14 +314,14 @@ Item {
         }
 
         Kirigami.Heading {
-            text: root.tr("cameraSelection")
+            text: i18n("Camera Selection")
             level: 3
             visible: cameraRepeater.count > 0
         }
 
         QQC2.Label {
             Layout.fillWidth: true
-            text: root.tr("selectCamerasHint")
+            text: i18n("Select which cameras appear in the viewer panel:")
             wrapMode: Text.WordWrap
             visible: cameraRepeater.count > 0
             opacity: 0.8
@@ -367,7 +355,7 @@ Item {
         }
 
         QQC2.Label {
-            text: root.tr("camerasSelected", { count: FrigateApi.toStringArray(root.cfg_selectedCameras).length })
+            text: i18np("%1 camera selected", "%1 cameras selected", FrigateApi.toStringArray(root.cfg_selectedCameras).length)
             visible: cameraRepeater.count > 0
             opacity: 0.7
         }
@@ -386,23 +374,23 @@ Item {
 
             QQC2.CheckBox {
                 id: haEnableCheck
-                Kirigami.FormData.label: root.tr("enableHaDetection") + ":"
-                text: root.tr("haEnable")
+                Kirigami.FormData.label: i18n("Enable Home Assistant Detection") + ":"
+                text: i18n("Enable")
             }
 
             QQC2.TextField {
                 id: haUrlField
-                Kirigami.FormData.label: root.tr("haWsUrl") + ":"
+                Kirigami.FormData.label: i18n("HA WebSocket URL") + ":"
                 Layout.fillWidth: true
-                placeholderText: "ws://192.168.31.190:8123/api/websocket"
+                placeholderText: "ws://192.168.1.100:8123/api/websocket"
                 enabled: haEnableCheck.checked
             }
 
             QQC2.TextField {
                 id: haTokenField
-                Kirigami.FormData.label: root.tr("haToken") + ":"
+                Kirigami.FormData.label: i18n("HA Access Token") + ":"
                 Layout.fillWidth: true
-                placeholderText: root.tr("haTokenPlaceholder")
+                placeholderText: i18n("Paste your Long-Lived Access Token")
                 echoMode: TextInput.Password
                 enabled: haEnableCheck.checked
             }
@@ -413,23 +401,23 @@ Item {
         }
 
         Kirigami.Heading {
-            text: root.tr("about")
+            text: i18n("About")
             level: 4
         }
 
         QQC2.Label {
-            text: root.tr("developedBy")
+            text: i18n("Developed by pir0c0pter0")
             opacity: 0.75
         }
 
         QQC2.Label {
-            text: root.tr("version", { version: String(Plasmoid.metaData.version || "1.0.0") })
+            text: i18n("Version %1", String(Plasmoid.metaData.version || "1.0.0"))
             opacity: 0.65
         }
 
         QQC2.Label {
             Layout.fillWidth: true
-            text: root.tr("applyCloseHint")
+            text: i18n("Tip: use Apply/OK to persist configuration in Plasma dialogs.")
             wrapMode: Text.WordWrap
             opacity: 0.65
         }
