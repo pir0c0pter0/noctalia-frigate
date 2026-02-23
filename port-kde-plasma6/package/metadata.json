@@ -1,0 +1,25 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "KPlugin": {
+    "Id": "com.noctalia.frigateviewer",
+    "Name": "Frigate Viewer",
+    "Name[pt_BR]": "Visualizador Frigate",
+    "Description": "Live camera viewer for Frigate NVR",
+    "Description[pt_BR]": "Visualizador de cameras ao vivo para Frigate NVR",
+    "Icon": "camera-video",
+    "Category": "Multimedia",
+    "Authors": [
+      {
+        "Name": "pir0c0pter0"
+      },
+      {
+        "Name": "Port for KDE Plasma 6 by mariostjr"
+      }
+    ],
+    "License": "MIT",
+    "Version": "1.0.0-plasma6",
+    "Website": "https://github.com/pir0c0pter0/noctalia-frigate",
+    "BugReportUrl": "https://github.com/pir0c0pter0/noctalia-frigate/issues"
+  },
+  "X-Plasma-API-Minimum-Version": "6.0"
+}
