@@ -150,6 +150,14 @@ NOCTALIA_DEBUG=1 qs -c noctalia-shell --no-duplicate
 
 Changes to QML files are picked up on save.
 
+## KDE Plasma 6 Port
+
+The complete Plasma 6 port is available in:
+
+- `port-kde-plasma6/README.md`
+
+It includes the full plasmoid package, installation scripts, feature-parity baseline, and test matrix.
+
 ### Project Structure
 
 ```
