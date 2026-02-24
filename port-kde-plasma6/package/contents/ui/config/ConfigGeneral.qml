@@ -17,6 +17,7 @@ Item {
     property alias cfg_password: passField.text
     property alias cfg_haUrl: haUrlField.text
     property alias cfg_haToken: haTokenField.text
+    property alias cfg_haEventType: haEventTypeField.text
     property alias cfg_enableHaIntegration: haEnableCheck.checked
     property var cfg_selectedCameras: []
     property var cfg_cameraOrder: []
@@ -25,6 +26,7 @@ Item {
     property string cfg_passwordDefault: ""
     property string cfg_haUrlDefault: ""
     property string cfg_haTokenDefault: ""
+    property string cfg_haEventTypeDefault: "reolink_person_detected"
     property bool cfg_enableHaIntegrationDefault: false
     property var cfg_selectedCamerasDefault: []
     property var cfg_cameraOrderDefault: []
@@ -38,6 +40,10 @@ Item {
 
     function saveConfig() {
         cfg_frigateUrl = FrigateApi.normalizeBaseUrl(cfg_frigateUrl)
+        cfg_haEventType = String(cfg_haEventType || "").trim()
+        if (cfg_haEventType.length === 0) {
+            cfg_haEventType = "reolink_person_detected"
+        }
         cfg_selectedCameras = FrigateApi.toStringArray(cfg_selectedCameras)
         cfg_cameraOrder = FrigateApi.orderedSelection(cfg_selectedCameras, cfg_cameraOrder)
     }
@@ -66,6 +72,7 @@ Item {
         Plasmoid.configuration.password = cfg_password
         Plasmoid.configuration.haUrl = cfg_haUrl
         Plasmoid.configuration.haToken = cfg_haToken
+        Plasmoid.configuration.haEventType = cfg_haEventType
         Plasmoid.configuration.enableHaIntegration = cfg_enableHaIntegration
         Plasmoid.configuration.selectedCameras = cfg_selectedCameras
         Plasmoid.configuration.cameraOrder = cfg_cameraOrder
@@ -209,6 +216,10 @@ Item {
 
     Component.onCompleted: {
         cfg_frigateUrl = FrigateApi.normalizeBaseUrl(cfg_frigateUrl)
+        cfg_haEventType = String(cfg_haEventType || "").trim()
+        if (cfg_haEventType.length === 0) {
+            cfg_haEventType = "reolink_person_detected"
+        }
         cfg_selectedCameras = FrigateApi.toStringArray(cfg_selectedCameras)
         cfg_cameraOrder = FrigateApi.orderedSelection(cfg_selectedCameras, cfg_cameraOrder)
     }
@@ -393,6 +404,15 @@ Item {
                 placeholderText: i18n("Paste your Long-Lived Access Token")
                 echoMode: TextInput.Password
                 enabled: haEnableCheck.checked
+            }
+
+            QQC2.TextField {
+                id: haEventTypeField
+                Kirigami.FormData.label: i18n("HA Event Type") + ":"
+                Layout.fillWidth: true
+                placeholderText: "reolink_person_detected"
+                enabled: haEnableCheck.checked
+                inputMethodHints: Qt.ImhNoPredictiveText
             }
         }
 
