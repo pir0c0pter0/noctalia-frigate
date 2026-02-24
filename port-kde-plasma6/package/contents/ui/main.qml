@@ -16,6 +16,9 @@ PlasmoidItem {
     readonly property string haUrl: Plasmoid.configuration.haUrl || ""
     readonly property string haToken: Plasmoid.configuration.haToken || ""
     readonly property bool enableHaIntegration: !!Plasmoid.configuration.enableHaIntegration
+    readonly property string haEventType: String(Plasmoid.configuration.haEventType || "").trim()
+    readonly property string effectiveHaEventType: haEventType.length > 0 ? haEventType : "reolink_person_detected"
+    readonly property bool haConfigured: root.enableHaIntegration && root.haUrl !== "" && root.haToken !== ""
 
     readonly property var effectiveSelectedCameras: FrigateApi.orderedSelection(
         FrigateApi.toStringArray(Plasmoid.configuration.selectedCameras),
@@ -28,7 +31,14 @@ PlasmoidItem {
     property string testResultMessage: ""
     property string testResultStatus: ""
     property int haMessageId: 1
-    property bool haReconnectTrigger: true
+    property bool haSocketEnabled: true
+    property bool haReconnectInProgress: false
+    property bool haAuthenticated: false
+    property bool haSubscribed: false
+    property int haSubscriptionRequestId: -1
+    property int haSubscriptionId: -1
+    property int haPendingPingId: -1
+    property int haMissedPongs: 0
 
     readonly property string currentCameraName: {
         var list = effectiveSelectedCameras
@@ -76,9 +86,24 @@ PlasmoidItem {
     ]
 
     onExpandedChanged: {
-        if (expanded && root.enableHaIntegration && haSocket.status !== WebSocket.Open && haSocket.status !== WebSocket.Connecting) {
-            root.haReconnectTrigger = false
-            root.haReconnectTrigger = true
+        if (expanded && root.haConfigured && haSocket.status !== WebSocket.Open && haSocket.status !== WebSocket.Connecting) {
+            root.requestHaReconnect("widget expanded")
+        }
+    }
+
+    onHaConfiguredChanged: {
+        root.resetHaSessionState()
+        root.haSocketEnabled = true
+        root.haReconnectInProgress = false
+
+        if (root.haConfigured) {
+            root.requestHaReconnect("HA configuration changed")
+        }
+    }
+
+    onEffectiveHaEventTypeChanged: {
+        if (root.haConfigured && haSocket.status === WebSocket.Open) {
+            root.requestHaReconnect("HA event type changed")
         }
     }
 
@@ -296,10 +321,10 @@ PlasmoidItem {
 
     function switchToCamera(cameraName) {
         var list = effectiveSelectedCameras
-        var target = String(cameraName).toLowerCase()
-        
+        var target = String(cameraName).toLowerCase().replace(/_/g, ' ')
+
         for (var i = 0; i < list.length; i++) {
-            var current = String(list[i]).toLowerCase()
+            var current = String(list[i]).toLowerCase().replace(/_/g, ' ')
             if (current === target || target.indexOf(current) !== -1 || current.indexOf(target) !== -1) {
                 currentIndex = i
                 return true
@@ -308,61 +333,215 @@ PlasmoidItem {
         return false
     }
 
+    function nextHaMessageId() {
+        var id = haMessageId
+        haMessageId = haMessageId + 1
+        return id
+    }
+
+    function resetHaSessionState() {
+        haAuthenticated = false
+        haSubscribed = false
+        haSubscriptionRequestId = -1
+        haSubscriptionId = -1
+        haPendingPingId = -1
+        haMissedPongs = 0
+    }
+
+    function requestHaReconnect(reason) {
+        if (!root.haConfigured || root.haReconnectInProgress) {
+            return
+        }
+
+        root.haReconnectInProgress = true
+        root.haSocketEnabled = false
+        console.log("HA reconnect requested:", reason || "unspecified")
+        haReconnectPulseTimer.restart()
+    }
+
+    function subscribeToHaEvents() {
+        if (haSocket.status !== WebSocket.Open || !root.haAuthenticated) {
+            return
+        }
+
+        var requestId = root.nextHaMessageId()
+        root.haSubscriptionRequestId = requestId
+        root.haSubscribed = false
+        haSocket.sendTextMessage(JSON.stringify({
+            "id": requestId,
+            "type": "subscribe_events",
+            "event_type": root.effectiveHaEventType
+        }))
+    }
+
+    function trackHaPong(pongId) {
+        if (root.haPendingPingId === -1) {
+            return
+        }
+
+        if (pongId === undefined || pongId === null || pongId === root.haPendingPingId) {
+            root.haPendingPingId = -1
+            root.haMissedPongs = 0
+        }
+    }
+
+    function handleHaResult(data) {
+        if (!data || typeof data !== "object") {
+            return
+        }
+
+        var resultId = data.id
+        if (resultId === root.haSubscriptionRequestId) {
+            if (data.success === true) {
+                root.haSubscribed = true
+                if (data.result !== undefined && data.result !== null) {
+                    var parsedSubscriptionId = Number(data.result)
+                    root.haSubscriptionId = isFinite(parsedSubscriptionId) ? parsedSubscriptionId : -1
+                } else {
+                    root.haSubscriptionId = -1
+                }
+            } else {
+                root.haSubscribed = false
+                var message = data.error && data.error.message ? data.error.message : "Unknown subscribe error"
+                console.error("HA subscribe_events failed:", message)
+                root.requestHaReconnect("HA subscribe_events failed")
+            }
+            return
+        }
+
+        if (resultId === root.haPendingPingId) {
+            root.trackHaPong(resultId)
+        }
+    }
+
+    function handleHaEvent(data) {
+        if (!data || typeof data !== "object") {
+            return
+        }
+
+        if (!data.event || data.event.event_type !== root.effectiveHaEventType) {
+            return
+        }
+
+        var eventData = data.event.data
+        if (!eventData || typeof eventData !== "object") {
+            eventData = {}
+        }
+
+        var cameraName = eventData.camera || eventData.camera_name || eventData.camera_id
+        if (cameraName !== undefined && cameraName !== null && String(cameraName).length > 0) {
+            if (root.switchToCamera(String(cameraName))) {
+                root.expanded = true
+            }
+        }
+    }
+
     WebSocket {
         id: haSocket
         url: root.haUrl
-        active: root.enableHaIntegration && root.haUrl !== "" && root.haToken !== "" && root.haReconnectTrigger
+        active: root.haConfigured && root.haSocketEnabled
         onTextMessageReceived: function(message) {
-            var data = JSON.parse(message)
+            var data = null
+            try {
+                data = JSON.parse(message)
+            } catch (error) {
+                console.error("HA WebSocket JSON parse error:", error)
+                return
+            }
+
+            if (!data || typeof data !== "object") {
+                return
+            }
+
             if (data.type === "auth_required") {
+                root.resetHaSessionState()
                 haSocket.sendTextMessage(JSON.stringify({
                     "type": "auth",
                     "access_token": root.haToken
                 }))
-            } else if (data.type === "auth_ok") {
-                haSocket.sendTextMessage(JSON.stringify({
-                    "id": root.haMessageId++,
-                    "type": "subscribe_events",
-                    "event_type": "reolink_person_detected"
-                }))
-            } else if (data.type === "event" && data.event && data.event.event_type === "reolink_person_detected") {
-                var eventData = data.event.data
-                var cameraName = eventData.camera || eventData.camera_name || eventData.camera_id
-                if (cameraName) {
-                    if (root.switchToCamera(cameraName)) {
-                        root.expanded = true
-                    }
-                }
+                return
+            }
+
+            if (data.type === "auth_ok") {
+                root.haAuthenticated = true
+                root.subscribeToHaEvents()
+                return
+            }
+
+            if (data.type === "auth_invalid") {
+                console.error("HA WebSocket auth invalid:", data.message || "unknown error")
+                root.requestHaReconnect("HA auth_invalid")
+                return
+            }
+
+            if (data.type === "result") {
+                root.handleHaResult(data)
+                return
+            }
+
+            if (data.type === "pong") {
+                root.trackHaPong(data.id)
+                return
+            }
+
+            if (data.type === "event") {
+                root.handleHaEvent(data)
             }
         }
         onStatusChanged: {
             if (haSocket.status === WebSocket.Error) {
                 console.error("HA WebSocket Error:", haSocket.errorString)
+                root.resetHaSessionState()
+                root.haReconnectInProgress = false
             } else if (haSocket.status === WebSocket.Open) {
                 root.haMessageId = 1
+                root.resetHaSessionState()
+                root.haReconnectInProgress = false
+            } else if (haSocket.status === WebSocket.Closed) {
+                root.resetHaSessionState()
             }
+        }
+    }
+
+    Timer {
+        id: haReconnectPulseTimer
+        interval: 600
+        repeat: false
+        onTriggered: {
+            root.haSocketEnabled = true
+            root.haReconnectInProgress = false
         }
     }
 
     Timer {
         id: haReconnectTimer
         interval: 10000
-        running: root.enableHaIntegration && root.haUrl !== "" && (haSocket.status === WebSocket.Closed || haSocket.status === WebSocket.Error)
+        running: root.haConfigured && (haSocket.status === WebSocket.Closed || haSocket.status === WebSocket.Error)
         repeat: true
         onTriggered: {
-            root.haReconnectTrigger = false
-            root.haReconnectTrigger = true
+            root.requestHaReconnect("HA retry timer")
         }
     }
 
     Timer {
         id: haPingTimer
         interval: 30000
-        running: haSocket.status === WebSocket.Open && root.enableHaIntegration
+        running: haSocket.status === WebSocket.Open && root.haConfigured && root.haAuthenticated
         repeat: true
         onTriggered: {
+            if (root.haPendingPingId !== -1) {
+                root.haMissedPongs = root.haMissedPongs + 1
+                if (root.haMissedPongs >= 2) {
+                    console.error("HA ping timeout detected. Forcing reconnect.")
+                    root.requestHaReconnect("HA ping timeout")
+                }
+                return
+            }
+
+            var pingId = root.nextHaMessageId()
+            root.haPendingPingId = pingId
             haSocket.sendTextMessage(JSON.stringify({
-                "id": root.haMessageId++,
+                "id": pingId,
                 "type": "ping"
             }))
         }
