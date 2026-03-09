@@ -201,7 +201,7 @@ Contributions are welcome! This is a pure QML project — no build tools needed.
 
 ## License
 
-[MIT](LICENSE) &copy; [pir0c0pter0](https://github.com/pir0c0pter0)
+[MIT](LICENSE) &copy; [pir0c0pter0](https://github.com/pir0c0pter0) (pir0c0pter0000@gmail.com)
 
 ---
 
