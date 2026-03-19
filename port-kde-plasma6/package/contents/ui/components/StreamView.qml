@@ -2,6 +2,8 @@ import QtQuick
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
+import "../code/I18n.js" as I18n
+
 Item {
     id: root
     clip: true
@@ -18,17 +20,18 @@ Item {
     property bool nextBufferIsA: true
     property bool waitingFrame: false
     property int frameCount: 0
-    property string statusText: i18n("No cameras configured. Open settings and list cameras.")
+    property string statusText: root.tr("noCamerasConfigured")
     property var cameraAspectRatios: ({})
     readonly property int previewIntervalMs: 1000
+    readonly property string localeName: Qt.locale().name
 
-    readonly property string modeChipText: liveMode ? i18n("Live MJPEG") : i18n("Preview 1 FPS")
+    readonly property string modeChipText: liveMode ? root.tr("liveModeChip") : root.tr("previewModeChip")
 
     readonly property string interactionHint: {
         if (!streaming || !snapshotBaseUrl || statusText.length > 0) {
             return ""
         }
-        return liveMode ? i18n("Live mode active. Click the image to return to preview.") : i18n("Preview mode (1 fps). Click the image for live mode.")
+        return liveMode ? root.tr("liveHint") : root.tr("previewHint")
     }
 
     readonly property real defaultAspectRatio: 16 / 9
@@ -54,6 +57,10 @@ Item {
     readonly property int preferredVideoHeight: preferredVideoSize.height
 
     anchors.fill: parent
+
+    function tr(key, params) {
+        return I18n.tr(localeName, key, params)
+    }
 
     function updateAspectRatio(imageItem) {
         var width = imageItem && imageItem.sourceSize ? imageItem.sourceSize.width : 0
@@ -179,7 +186,7 @@ Item {
     function handleFrameError() {
         if (!streaming) return
         waitingFrame = false
-        statusText = connected ? i18n("Stream unavailable. Check your connection.") : i18n("Frigate is offline. Check server status and settings.")
+        statusText = connected ? root.tr("streamError") : root.tr("frigateOffline")
         if (!liveMode) {
             retryTimer.restart()
         }
@@ -235,7 +242,7 @@ Item {
         bufferA.source = ""
         bufferB.source = ""
         liveStreamImage.source = ""
-        statusText = snapshotBaseUrl ? "" : i18n("No cameras configured. Open settings and list cameras.")
+        statusText = snapshotBaseUrl ? "" : root.tr("noCamerasConfigured")
     }
 
     onSnapshotBaseUrlChanged: {

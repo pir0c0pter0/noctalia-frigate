@@ -82,7 +82,7 @@ PlasmaExtras.Representation {
                 PlasmaComponents3.Label {
                     Layout.fillWidth: true
                     horizontalAlignment: Text.AlignHCenter
-                    text: root.cameraName || i18n("No camera selected")
+                    text: root.cameraName || root.plasmoidItem.tr("noCameraSelected")
                     elide: Text.ElideRight
                     opacity: root.cameraName ? 1.0 : 0.65
                     font.pointSize: Kirigami.Theme.defaultFont.pointSize + 1
@@ -133,8 +133,8 @@ PlasmaExtras.Representation {
 
                         PlasmaComponents3.Label {
                             text: root.connected
-                                ? i18n("Connected")
-                                : i18n("Disconnected")
+                                ? root.plasmoidItem.tr("connected")
+                                : root.plasmoidItem.tr("disconnected")
                             font.pointSize: Kirigami.Theme.smallFont.pointSize
                             font.weight: Font.Medium
                         }
@@ -212,9 +212,11 @@ PlasmaExtras.Representation {
                 text: {
                     if (!root.cameraName) return "";
                     if (streamView.liveMode) {
-                        return root.cameraName + " | " + i18n("Live MJPEG Stream");
+                        return root.cameraName + " | " + root.plasmoidItem.tr("liveMjpegStream");
                     }
-                    return root.cameraName + " | " + i18np("%1 frame", "%1 frames", streamView.frameCount);
+                    return root.cameraName + " | " + root.plasmoidItem.trCount("frameSingular", "framePlural", streamView.frameCount, {
+                        "count": streamView.frameCount
+                    });
                 }
                 visible: root.cameraName.length > 0
                 opacity: 0.58

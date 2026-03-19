@@ -7,6 +7,8 @@ Item {
     readonly property string frigateUrl: pluginApi?.pluginSettings?.frigateUrl ?? ""
     readonly property string username: pluginApi?.pluginSettings?.username ?? ""
     readonly property string password: pluginApi?.pluginSettings?.password ?? ""
+    readonly property string defaultCamera: pluginApi?.pluginSettings?.defaultCamera ?? ""
+    readonly property bool isPanelOpen: pluginApi?.isPanelOpen ?? false
 
     property string connectionStatus: "disconnected"
     property var cameraList: []
@@ -22,10 +24,57 @@ Item {
         return selectedCameras[idx] ?? ""
     }
 
-    readonly property string snapshotBaseUrl: buildAuthUrl("/api/" + currentCameraName + "/latest.jpg")
+    readonly property string snapshotBaseUrl: buildAuthUrl("/api/" + encodeURIComponent(currentCameraName) + "/latest.jpg")
 
     signal camerasLoaded(var cameras)
     signal testCompleted(string status, string message)
+
+    function tr(key, params) {
+        var value = pluginApi?.tr(key)
+        if (value === undefined || value === null) {
+            value = key
+        }
+        value = String(value)
+        if (/^!!.*!!$/.test(value)) {
+            value = key
+        }
+        if (!params) {
+            return value
+        }
+        return value.replace(/\{([a-zA-Z0-9_]+)\}/g, function(match, name) {
+            if (Object.prototype.hasOwnProperty.call(params, name)) {
+                return String(params[name])
+            }
+            return match
+        })
+    }
+
+    function indexForCamera(cameraName) {
+        return selectedCameras.indexOf(cameraName)
+    }
+
+    function defaultCameraIndex() {
+        var idx = indexForCamera(defaultCamera)
+        return idx !== -1 ? idx : 0
+    }
+
+    function ensureValidCurrentCamera() {
+        if (selectedCameras.length === 0) {
+            currentIndex = 0
+            return
+        }
+        if (currentIndex < 0 || currentIndex >= selectedCameras.length) {
+            currentIndex = defaultCameraIndex()
+        }
+    }
+
+    function resetToDefaultCamera() {
+        if (selectedCameras.length === 0) {
+            currentIndex = 0
+            return
+        }
+        currentIndex = defaultCameraIndex()
+    }
 
     function buildAuthUrl(path) {
         if (!frigateUrl || !currentCameraName) return ""
@@ -64,11 +113,14 @@ Item {
                         callback(null, text, xhr.status)
                     }
                 } else if (xhr.status === 401) {
-                    callback("Authentication failed (401). Check your username and password. Note: Frigate's native JWT auth (port 8971) is not supported \u2014 use port 5000 or a reverse proxy with Basic Auth.", null, 401)
+                    callback(root.tr("authFailed"), null, 401)
                 } else if (xhr.status === 0) {
-                    callback("Cannot reach server. Check the URL and ensure Frigate is running.", null, 0)
+                    callback(root.tr("cannotReachServer"), null, 0)
                 } else {
-                    callback("HTTP " + xhr.status + ": " + xhr.statusText, null, xhr.status)
+                    callback(root.tr("httpError", {
+                        "status": xhr.status,
+                        "statusText": xhr.statusText
+                    }), null, xhr.status)
                 }
             }
         }
@@ -81,12 +133,12 @@ Item {
 
     function testConnection() {
         if (!frigateUrl) {
-            testResultMessage = "No Frigate URL configured"
+            testResultMessage = root.tr("noUrlConfigured")
             testResultStatus = "error"
             testCompleted("error", testResultMessage)
             return
         }
-        testResultMessage = "Testing..."
+        testResultMessage = root.tr("testing")
         testResultStatus = "testing"
 
         var url = frigateUrl.replace(/\/+$/, "") + "/api/version"
@@ -97,7 +149,9 @@ Item {
                 root.connectionStatus = "disconnected"
             } else {
                 var version = data.version ?? data ?? "unknown"
-                testResultMessage = "Connected! Frigate v" + version
+                testResultMessage = root.tr("connectedVersion", {
+                    "version": version
+                })
                 testResultStatus = "ok"
                 root.connectionStatus = "connected"
             }
@@ -106,12 +160,18 @@ Item {
     }
 
     function fetchCameras() {
-        if (!frigateUrl) return
+        if (!frigateUrl) {
+            testResultMessage = root.tr("noUrlConfigured")
+            testResultStatus = "error"
+            return
+        }
 
         var url = frigateUrl.replace(/\/+$/, "") + "/api/config"
         makeAuthRequest(url, function(err, data) {
             if (err) {
-                testResultMessage = "Failed to fetch cameras: " + err
+                testResultMessage = root.tr("fetchCamerasFailed", {
+                    "error": err
+                })
                 testResultStatus = "error"
                 return
             }
@@ -135,6 +195,22 @@ Item {
         })
     }
 
+    onSelectedCamerasChanged: root.ensureValidCurrentCamera()
+
+    onDefaultCameraChanged: {
+        if (root.isPanelOpen) {
+            root.resetToDefaultCamera()
+        } else {
+            root.ensureValidCurrentCamera()
+        }
+    }
+
+    onIsPanelOpenChanged: {
+        if (root.isPanelOpen) {
+            root.resetToDefaultCamera()
+        }
+    }
+
     Timer {
         id: connectionPoller
         interval: 30000
@@ -144,6 +220,7 @@ Item {
     }
 
     Component.onCompleted: {
+        root.ensureValidCurrentCamera()
         if (frigateUrl) {
             pollConnection()
         }

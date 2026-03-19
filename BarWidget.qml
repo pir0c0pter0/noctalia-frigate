@@ -27,17 +27,29 @@ Item {
     implicitWidth: visualCapsule.width
     implicitHeight: visualCapsule.height
 
+    function tr(key, fallback) {
+        var value = pluginApi?.tr(key)
+        if (value === undefined || value === null) {
+            return fallback ?? key
+        }
+        value = String(value)
+        if (/^!!.*!!$/.test(value)) {
+            return fallback ?? key
+        }
+        return value
+    }
+
     NPopupContextMenu {
         id: contextMenu
 
         model: [
             {
-                "label": pluginApi?.tr("testConnection") ?? "Test Connection",
+                "label": root.tr("testConnection", "Test Connection"),
                 "action": "test",
                 "icon": "plug-connected"
             },
             {
-                "label": pluginApi?.tr("settings") ?? "Settings",
+                "label": root.tr("settings", "Settings"),
                 "action": "settings",
                 "icon": "settings"
             }
@@ -67,7 +79,7 @@ Item {
 
         NIcon {
             anchors.centerIn: parent
-            icon: "camera-cctv"
+            icon: "camera-video"
             opacity: root.isPanelOpen ? 1.0 : 0.7
         }
 
@@ -101,7 +113,7 @@ Item {
 
         onEntered: {
             var key = root.isConnected ? "tooltipConnected" : "tooltipDisconnected"
-            var tooltip = pluginApi?.tr(key) ?? (root.isConnected ? "Frigate Viewer \u2014 Connected" : "Frigate Viewer \u2014 Disconnected")
+            var tooltip = root.tr(key, root.isConnected ? "Frigate Viewer \u2014 Connected" : "Frigate Viewer \u2014 Disconnected")
             TooltipService.show(
                 root,
                 tooltip,

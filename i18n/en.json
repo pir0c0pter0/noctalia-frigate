@@ -1,5 +1,6 @@
 {
   "frigateConnection": "Frigate Connection",
+  "connectionDescription": "URL, username and password for your Frigate NVR",
   "frigateServerUrl": "Frigate Server URL",
   "urlPlaceholder": "http://192.168.1.100:5000",
   "usernameOptional": "Username (optional)",
@@ -9,9 +10,12 @@
   "saved": "Saved!",
   "testConnection": "Test Connection",
   "listCameras": "List Cameras",
+  "settings": "Settings",
   "cameraSelection": "Camera Selection",
   "selectCamerasHint": "Select which cameras appear in the viewer panel:",
   "camerasSelected": "{count} camera(s) selected",
+  "defaultCamera": "Default Camera",
+  "defaultCameraHint": "This camera opens first when you click the icon.",
   "noCamerasConfigured": "No cameras configured.\nGo to Settings to add your Frigate server\nand select cameras.",
   "loadingStream": "Loading stream...",
   "noCameraSelected": "No camera selected",
@@ -26,5 +30,8 @@
   "httpError": "HTTP {status}: {statusText}",
   "jsonParseError": "JSON parse error: {message}",
   "streamError": "Stream unavailable. Check your connection.",
-  "frigateOffline": "Frigate is offline.\nCheck that the server is running\nand the URL is correct in Settings."
+  "frigateOffline": "Frigate is offline.\nCheck that the server is running\nand the URL is correct in Settings.",
+  "about": "About",
+  "developedBy": "Developed by pir0c0pter0",
+  "version": "Version {version}"
 }

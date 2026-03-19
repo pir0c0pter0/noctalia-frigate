@@ -13,25 +13,55 @@ ColumnLayout {
     property string editUrl: pluginApi?.pluginSettings?.frigateUrl ?? ""
     property string editUsername: pluginApi?.pluginSettings?.username ?? ""
     property string editPassword: pluginApi?.pluginSettings?.password ?? ""
+    property string editDefaultCamera: pluginApi?.pluginSettings?.defaultCamera ?? ""
     property var editSelectedCameras: {
         var saved = pluginApi?.pluginSettings?.selectedCameras
         return saved ? Array.from(saved) : []
     }
 
-    function tr(key) {
-        return pluginApi?.tr(key) ?? key
+    function tr(key, params) {
+        var value = pluginApi?.tr(key)
+        if (value === undefined || value === null) {
+            value = key
+        }
+        value = String(value)
+        if (/^!!.*!!$/.test(value)) {
+            value = key
+        }
+        if (!params) {
+            return value
+        }
+        return value.replace(/\{([a-zA-Z0-9_]+)\}/g, function(match, name) {
+            if (Object.prototype.hasOwnProperty.call(params, name)) {
+                return String(params[name])
+            }
+            return match
+        })
+    }
+
+    function syncDefaultCamera() {
+        if (editSelectedCameras.length === 0) {
+            editDefaultCamera = ""
+            return
+        }
+        if (editSelectedCameras.indexOf(editDefaultCamera) === -1) {
+            editDefaultCamera = editSelectedCameras[0]
+        }
     }
 
     function saveSettings() {
         if (!pluginApi) return
+        syncDefaultCamera()
         pluginApi.pluginSettings.frigateUrl = editUrl.replace(/\/+$/, "")
         pluginApi.pluginSettings.username = editUsername
         pluginApi.pluginSettings.password = editPassword
         pluginApi.pluginSettings.selectedCameras = editSelectedCameras
         pluginApi.pluginSettings.cameraOrder = editSelectedCameras
+        pluginApi.pluginSettings.defaultCamera = editDefaultCamera
         pluginApi.saveSettings()
         if (mainInst) {
             mainInst.selectedCameras = editSelectedCameras
+            mainInst.resetToDefaultCamera()
         }
     }
 
@@ -48,14 +78,17 @@ ColumnLayout {
             updated.push(camName)
         }
         editSelectedCameras = updated
+        syncDefaultCamera()
     }
+
+    Component.onCompleted: syncDefaultCamera()
 
     spacing: Style.marginM
 
     // ─── Connection ───
     NLabel {
         label: root.tr("frigateConnection")
-        description: "URL, username and password for your Frigate NVR"
+        description: root.tr("connectionDescription")
     }
 
     ColumnLayout {
@@ -351,9 +384,28 @@ ColumnLayout {
     }
 
     NText {
-        text: editSelectedCameras.length + " camera(s) selected"
+        text: root.tr("camerasSelected", {
+            "count": editSelectedCameras.length
+        })
         opacity: 0.5
         visible: cameraRepeater.count > 0
+    }
+
+    NLabel {
+        label: root.tr("defaultCamera")
+        description: root.tr("defaultCameraHint")
+        visible: editSelectedCameras.length > 0
+    }
+
+    ComboBox {
+        Layout.fillWidth: true
+        visible: editSelectedCameras.length > 0
+        model: root.editSelectedCameras
+        currentIndex: Math.max(0, root.editSelectedCameras.indexOf(root.editDefaultCamera))
+        onActivated: {
+            root.editDefaultCamera = currentText
+            root.saveSettings()
+        }
     }
 
     // ─── About ───
@@ -363,18 +415,20 @@ ColumnLayout {
         spacing: 4
 
         NText {
-            text: "About"
+            text: root.tr("about")
             font.bold: true
         }
 
         NText {
-            text: "Developed by pir0c0pter0"
+            text: root.tr("developedBy")
             opacity: 0.7
             font.pixelSize: 12
         }
 
         NText {
-            text: "v" + (pluginApi?.manifest?.version ?? "1.0.0")
+            text: root.tr("version", {
+                "version": pluginApi?.manifest?.version ?? "1.0.0"
+            })
             opacity: 0.5
             font.pixelSize: 11
         }

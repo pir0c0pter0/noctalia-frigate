@@ -21,6 +21,9 @@
     <entry name="cameraOrder" type="StringList">
       <default></default>
     </entry>
+    <entry name="defaultCamera" type="String">
+      <default></default>
+    </entry>
     <entry name="haUrl" type="String">
       <default>ws://192.168.31.190:8123/api/websocket</default>
     </entry>

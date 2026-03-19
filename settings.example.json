@@ -3,6 +3,6 @@
   "username": "",
   "password": "",
   "selectedCameras": [],
-  "cameraOrder": []
+  "cameraOrder": [],
+  "defaultCamera": ""
 }
-

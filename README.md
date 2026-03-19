@@ -26,8 +26,9 @@ Frigate Viewer is a Noctalia Shell plugin that puts your security cameras one cl
 - **Camera Navigation** — Left/right buttons to cycle through selected cameras
 - **Settings UI** — Configure Frigate URL, optional Basic Auth credentials, test connection, and discover cameras
 - **Camera Selection** — Choose which cameras appear in the viewer via checkboxes
+- **Default Startup Camera** — Pick which selected camera opens first when clicking the widget icon
 - **Persistence** — All settings and camera selections survive restarts
-- **i18n** — Full English and Portuguese translations
+- **i18n** — Automatic English and pt-BR translations for Noctalia and Plasma 6
 - **Theme Compliance** — Zero hardcoded colors; all styling via Noctalia theme tokens
 
 ## Requirements
@@ -76,7 +77,8 @@ cp -r noctalia-frigate ~/.config/noctalia/plugins/noctalia-frigate
 4. Click **Save**, then **Test Connection**
 5. Click **List Cameras** to discover available cameras
 6. Check the cameras you want in the viewer
-7. Click **Save** again
+7. Choose the **Default Camera** that should open first
+8. Click **Save** again
 
 ### Supported Connection Scenarios
 
@@ -103,6 +105,7 @@ cp -r noctalia-frigate ~/.config/noctalia/plugins/noctalia-frigate
 - **Live stream** from the currently selected camera
 - **Camera name** displayed in the header
 - **Left/Right arrows** to navigate between cameras (visible when 2+ cameras selected)
+- **Default camera reset on open** so each click starts on your preferred camera
 - **Auto-reconnect** when reopening the panel
 - **Resource-friendly**: stream stops when panel is closed
 
@@ -113,9 +116,11 @@ manifest.json          Plugin identity + default settings
 Main.qml               State hub: connection, cameras, stream URL, navigation
 BarWidget.qml           Bar icon + status dot + tooltip + panel toggle
 Panel.qml              MJPEG viewer + navigation + error states
-Settings.qml           Connection config + camera selection
+Settings.qml           Connection config + camera selection + default camera
 i18n/en.json           English translations
 i18n/pt.json           Portuguese translations
+i18n/pt_BR.json        pt-BR locale alias
+i18n/pt-BR.json        pt-BR locale alias
 ```
 
 ### Data Flow
@@ -124,7 +129,7 @@ i18n/pt.json           Portuguese translations
 Main.qml (state hub)
   ├── BarWidget.qml reads: connectionStatus
   ├── Panel.qml reads: streamUrl, currentCameraName, selectedCameras
-  ├── Settings.qml writes: frigateUrl, username, password, selectedCameras
+  ├── Settings.qml writes: frigateUrl, username, password, selectedCameras, defaultCamera
   └── Frigate API: /api/version, /api/config, /api/<camera>?fps=5
 ```
 

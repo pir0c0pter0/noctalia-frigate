@@ -5,17 +5,20 @@ import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.plasmoid
 
 import "code/FrigateApi.js" as FrigateApi
+import "code/I18n.js" as I18n
 
 PlasmoidItem {
     id: root
 
+    readonly property string localeName: Qt.locale().name
     readonly property string frigateUrl: FrigateApi.normalizeBaseUrl(Plasmoid.configuration.frigateUrl || "")
     readonly property string username: String(Plasmoid.configuration.username || "")
     readonly property string password: String(Plasmoid.configuration.password || "")
+    readonly property string configuredDefaultCamera: String(Plasmoid.configuration.defaultCamera || "").trim()
 
     readonly property string haUrl: Plasmoid.configuration.haUrl || ""
     readonly property string haToken: Plasmoid.configuration.haToken || ""
-    readonly property bool enableHaIntegration: !!Plasmoid.configuration.enableHaIntegration
+    readonly property bool enableHaIntegration: Boolean(Plasmoid.configuration.enableHaIntegration)
     readonly property string haEventType: String(Plasmoid.configuration.haEventType || "").trim()
     readonly property string effectiveHaEventType: haEventType.length > 0 ? haEventType : "reolink_person_detected"
     readonly property bool haConfigured: root.enableHaIntegration && root.haUrl !== "" && root.haToken !== ""
@@ -35,6 +38,7 @@ PlasmoidItem {
     property bool haReconnectInProgress: false
     property bool haAuthenticated: false
     property bool haSubscribed: false
+    property bool preserveCurrentCameraOnNextExpand: false
     property int haSubscriptionRequestId: -1
     property int haSubscriptionId: -1
     property int haPendingPingId: -1
@@ -59,10 +63,47 @@ PlasmoidItem {
     signal camerasLoaded(var cameras)
     signal testCompleted(string status, string message)
 
-    Plasmoid.title: i18n("Frigate Viewer")
+    function tr(key, params) {
+        return I18n.tr(localeName, key, params)
+    }
+
+    function trCount(singularKey, pluralKey, count, params) {
+        return I18n.trCount(localeName, singularKey, pluralKey, count, params)
+    }
+
+    function indexForCamera(cameraName) {
+        return effectiveSelectedCameras.indexOf(cameraName)
+    }
+
+    function defaultCameraIndex() {
+        var idx = indexForCamera(configuredDefaultCamera)
+        return idx !== -1 ? idx : 0
+    }
+
+    function ensureValidCurrentCamera() {
+        if (!effectiveSelectedCameras.length) {
+            currentIndex = 0
+            return
+        }
+
+        if (currentIndex < 0 || currentIndex >= effectiveSelectedCameras.length) {
+            currentIndex = defaultCameraIndex()
+        }
+    }
+
+    function resetToDefaultCamera() {
+        if (!effectiveSelectedCameras.length) {
+            currentIndex = 0
+            return
+        }
+
+        currentIndex = defaultCameraIndex()
+    }
+
+    Plasmoid.title: root.tr("frigateViewerTitle")
     Plasmoid.icon: "camera-video"
     Plasmoid.status: connectionStatus === "connected" ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.PassiveStatus
-    toolTipSubText: connectionStatus === "connected" ? i18n("Frigate is reachable") : i18n("Frigate is offline")
+    toolTipSubText: connectionStatus === "connected" ? root.tr("statusConnected") : root.tr("statusDisconnected")
 
     compactRepresentation: CompactRepresentation {
         plasmoidItem: root
@@ -74,18 +115,26 @@ PlasmoidItem {
 
     Plasmoid.contextualActions: [
         PlasmaCore.Action {
-            text: i18n("Test Connection")
+            text: root.tr("testConnection")
             icon.name: "network-connect"
             onTriggered: root.testConnection()
         },
         PlasmaCore.Action {
-            text: i18n("Settings")
+            text: root.tr("settings")
             icon.name: "settings-configure"
             onTriggered: root.openSettingsDialog()
         }
     ]
 
     onExpandedChanged: {
+        if (expanded) {
+            if (root.preserveCurrentCameraOnNextExpand) {
+                root.preserveCurrentCameraOnNextExpand = false
+            } else {
+                root.resetToDefaultCamera()
+            }
+        }
+
         if (expanded && root.haConfigured && haSocket.status !== WebSocket.Open && haSocket.status !== WebSocket.Connecting) {
             root.requestHaReconnect("widget expanded")
         }
@@ -108,13 +157,14 @@ PlasmoidItem {
     }
 
     onEffectiveSelectedCamerasChanged: {
-        if (!effectiveSelectedCameras.length) {
-            currentIndex = 0
-            return
-        }
+        root.ensureValidCurrentCamera()
+    }
 
-        if (currentIndex >= effectiveSelectedCameras.length) {
-            currentIndex = 0
+    onConfiguredDefaultCameraChanged: {
+        if (root.expanded) {
+            root.resetToDefaultCamera()
+        } else {
+            root.ensureValidCurrentCamera()
         }
     }
 
@@ -209,20 +259,23 @@ PlasmoidItem {
             }
 
             if (xhr.status === 401) {
-                callback(i18n("Authentication failed (401). Check credentials."), null, 401)
+                callback(root.tr("authFailed"), null, 401)
                 return
             }
 
             if (xhr.status === 0) {
-                callback(i18n("Cannot reach server. Check URL and whether Frigate is running."), null, 0)
+                callback(root.tr("cannotReachServer"), null, 0)
                 return
             }
 
-            callback(i18n("HTTP %1: %2", xhr.status, xhr.statusText || "Unknown"), null, xhr.status)
+            callback(root.tr("httpError", {
+                "status": xhr.status,
+                "statusText": xhr.statusText || "Unknown"
+            }), null, xhr.status)
         }
 
         xhr.ontimeout = function() {
-            callback(i18n("Cannot reach server. Check URL and whether Frigate is running."), null, 0)
+            callback(root.tr("cannotReachServer"), null, 0)
         }
 
         xhr.open("GET", url, true)
@@ -238,13 +291,13 @@ PlasmoidItem {
 
     function testConnection() {
         if (!frigateUrl) {
-            testResultMessage = i18n("No Frigate URL configured")
+            testResultMessage = root.tr("noUrlConfigured")
             testResultStatus = "error"
             testCompleted(testResultStatus, testResultMessage)
             return
         }
 
-        testResultMessage = i18n("Testing...")
+        testResultMessage = root.tr("testing")
         testResultStatus = "testing"
 
         var url = frigateUrl + "/api/version"
@@ -261,7 +314,9 @@ PlasmoidItem {
                     version = data
                 }
 
-                testResultMessage = i18n("Connected! Frigate v%1", version)
+                testResultMessage = root.tr("connectedVersion", {
+                    "version": version
+                })
                 testResultStatus = "ok"
                 connectionStatus = "connected"
             }
@@ -272,7 +327,7 @@ PlasmoidItem {
 
     function fetchCameras() {
         if (!frigateUrl) {
-            testResultMessage = i18n("No Frigate URL configured")
+            testResultMessage = root.tr("noUrlConfigured")
             testResultStatus = "error"
             return
         }
@@ -280,7 +335,9 @@ PlasmoidItem {
         var url = frigateUrl + "/api/config"
         makeAuthRequest(url, function(err, data) {
             if (err) {
-                testResultMessage = i18n("Failed to fetch cameras: %1", err)
+                testResultMessage = root.tr("fetchCamerasFailed", {
+                    "error": err
+                })
                 testResultStatus = "error"
                 return
             }
@@ -431,6 +488,7 @@ PlasmoidItem {
         var cameraName = eventData.camera || eventData.camera_name || eventData.camera_id
         if (cameraName !== undefined && cameraName !== null && String(cameraName).length > 0) {
             if (root.switchToCamera(String(cameraName))) {
+                root.preserveCurrentCameraOnNextExpand = !root.expanded
                 root.expanded = true
             }
         }
@@ -556,6 +614,7 @@ PlasmoidItem {
     }
 
     Component.onCompleted: {
+        root.ensureValidCurrentCamera()
         if (frigateUrl) {
             pollConnection()
         }

@@ -2,6 +2,8 @@
 
 Port completo do plugin Frigate Viewer (Noctalia/niri) para um plasmoid nativo do KDE Plasma 6.
 
+Inclui selecao de camera padrao na abertura do widget e traducao automatica EN/pt_BR.
+
 ## Estrutura
 
 - `port-kde-plasma6/PLANO_PORT_KDE_PLASMA6.md`: plano macro de port.
@@ -29,4 +31,3 @@ Depois, no Plasma: `Adicionar Widgets` -> `Frigate Viewer`.
 ## ID do widget
 
 - `com.noctalia.frigateviewer`
-
