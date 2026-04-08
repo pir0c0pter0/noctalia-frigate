@@ -18,8 +18,11 @@ Item {
     property bool streaming: false
     property int frameCount: 0
     property bool bufferFlip: false
+    property bool nextBufferIsA: true
+    property bool waitingFrame: false
     property var cameraAspectRatios: ({})
 
+    readonly property int previewIntervalMs: 1000
     readonly property real defaultAspectRatio: 16 / 9
     readonly property real minAspectRatio: 0.4
     readonly property real maxAspectRatio: 3.0
@@ -57,13 +60,66 @@ Item {
         streaming = true
         frameCount = 0
         bufferFlip = false
-        bufferA.source = stampedUrl()
+        nextBufferIsA = true
+        waitingFrame = false
+        statusLabel.text = ""
+        frameTimer.stop()
+        retryTimer.stop()
+        requestNextFrame()
     }
 
     function stopStreaming() {
         streaming = false
+        waitingFrame = false
+        frameTimer.stop()
+        retryTimer.stop()
         bufferA.source = ""
         bufferB.source = ""
+    }
+
+    function scheduleNextFrame() {
+        if (!streaming || !hasSnapshot) {
+            frameTimer.stop()
+            return
+        }
+
+        frameTimer.interval = previewIntervalMs
+        frameTimer.restart()
+    }
+
+    function requestNextFrame() {
+        if (!streaming || !hasSnapshot || waitingFrame) return
+
+        var url = stampedUrl()
+        if (!url) return
+
+        waitingFrame = true
+        if (nextBufferIsA) {
+            bufferA.source = url
+        } else {
+            bufferB.source = url
+        }
+    }
+
+    function handleFrameReady(imageItem, loadedBufferIsA) {
+        if (!streaming) return
+
+        updateAspectRatio(imageItem)
+        statusLabel.text = ""
+        frameCount++
+        waitingFrame = false
+        bufferFlip = !loadedBufferIsA
+        nextBufferIsA = !loadedBufferIsA
+        scheduleNextFrame()
+    }
+
+    function handleFrameError() {
+        if (!streaming) return
+
+        waitingFrame = false
+        frameTimer.stop()
+        statusLabel.text = isConnected ? tr("streamError") : tr("frigateOffline")
+        retryTimer.restart()
     }
 
     function updateAspectRatio(imageItem) {
@@ -227,16 +283,9 @@ Item {
 
                 onStatusChanged: {
                     if (status === Image.Ready) {
-                        root.updateAspectRatio(bufferA)
-                        statusLabel.text = ""
-                        root.frameCount++
-                        if (root.streaming) {
-                            root.bufferFlip = false
-                            bufferB.source = root.stampedUrl()
-                        }
+                        root.handleFrameReady(bufferA, true)
                     } else if (status === Image.Error) {
-                        statusLabel.text = root.isConnected ? root.tr("streamError") : root.tr("frigateOffline")
-                        retryTimer.start()
+                        root.handleFrameError()
                     }
                 }
             }
@@ -251,19 +300,19 @@ Item {
 
                 onStatusChanged: {
                     if (status === Image.Ready) {
-                        root.updateAspectRatio(bufferB)
-                        statusLabel.text = ""
-                        root.frameCount++
-                        if (root.streaming) {
-                            root.bufferFlip = true
-                            bufferA.source = root.stampedUrl()
-                        }
+                        root.handleFrameReady(bufferB, false)
                     } else if (status === Image.Error) {
-                        statusLabel.text = root.isConnected ? root.tr("streamError") : root.tr("frigateOffline")
-                        retryTimer.start()
+                        root.handleFrameError()
                     }
                 }
             }
+        }
+
+        Timer {
+            id: frameTimer
+            interval: root.previewIntervalMs
+            repeat: false
+            onTriggered: root.requestNextFrame()
         }
 
         Timer {
@@ -272,8 +321,7 @@ Item {
             repeat: false
             onTriggered: {
                 if (root.streaming && root.hasSnapshot) {
-                    root.bufferFlip = false
-                    bufferA.source = root.stampedUrl()
+                    root.requestNextFrame()
                 }
             }
         }
