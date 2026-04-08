@@ -62,7 +62,8 @@ Item {
         bufferFlip = false
         nextBufferIsA = true
         waitingFrame = false
-        statusLabel.text = ""
+        flushFrameBuffers()
+        statusLabel.text = tr("loadingStream")
         frameTimer.stop()
         retryTimer.stop()
         requestNextFrame()
@@ -73,6 +74,10 @@ Item {
         waitingFrame = false
         frameTimer.stop()
         retryTimer.stop()
+        flushFrameBuffers()
+    }
+
+    function flushFrameBuffers() {
         bufferA.source = ""
         bufferB.source = ""
     }
@@ -95,8 +100,10 @@ Item {
 
         waitingFrame = true
         if (nextBufferIsA) {
+            bufferA.source = ""
             bufferA.source = url
         } else {
+            bufferB.source = ""
             bufferB.source = url
         }
     }
