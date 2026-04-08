@@ -8,7 +8,7 @@ Item {
     readonly property string username: pluginApi?.pluginSettings?.username ?? ""
     readonly property string password: pluginApi?.pluginSettings?.password ?? ""
     readonly property string defaultCamera: pluginApi?.pluginSettings?.defaultCamera ?? ""
-    readonly property bool isPanelOpen: pluginApi?.isPanelOpen ?? false
+    readonly property bool isPanelOpen: pluginApi?.panelOpenScreen !== null
 
     property string connectionStatus: "disconnected"
     property var cameraList: []

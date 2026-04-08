@@ -16,7 +16,7 @@ Item {
     property int sectionWidgetsCount: 0
 
     readonly property var mainInst: pluginApi?.mainInstance ?? null
-    readonly property bool isPanelOpen: pluginApi?.isPanelOpen ?? false
+    readonly property bool isPanelOpen: pluginApi?.panelOpenScreen !== null
     readonly property bool isConnected: mainInst?.connectionStatus === "connected"
 
     readonly property string screenName: screen ? screen.name : ""
