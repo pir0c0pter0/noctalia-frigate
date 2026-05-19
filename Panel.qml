@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import qs.Commons
 import qs.Widgets
 import "Translation.js" as Translation
@@ -137,19 +138,13 @@ Item {
     // ROB-3: tracks which URL the current streaming session is bound to.
     property string activeStreamUrl: ""
 
-    // SEC-1: handle to the in-flight authenticated XMLHttpRequest, if any.
-    property var inFlightXhr: null
+    // SEC-4: generation tag of the in-flight authenticated curl fetch.
+    property int frameFetchGen: 0
 
     function abortInFlight() {
-        if (inFlightXhr) {
-            try {
-                inFlightXhr.onreadystatechange = function () {}
-                inFlightXhr.ontimeout = function () {}
-                inFlightXhr.abort()
-            } catch (e) {
-                // ignore: aborting an already-finished request is harmless
-            }
-            inFlightXhr = null
+        // Stopping the Process terminates the in-flight curl, if any.
+        if (frameFetch.running) {
+            frameFetch.running = false
         }
     }
 
@@ -171,16 +166,29 @@ Item {
         frameTimer.restart()
     }
 
-    // SEC-1: convert an ArrayBuffer of JPEG bytes into a data: URI.
-    function arrayBufferToDataUri(buffer) {
-        const bytes = new Uint8Array(buffer)
-        let binary = ""
-        const chunk = 8192
-        for (let i = 0; i < bytes.length; i += chunk) {
-            const slice = bytes.subarray(i, Math.min(i + chunk, bytes.length))
-            binary += String.fromCharCode.apply(null, slice)
+    // SEC-4: build a `curl --config` payload carrying the Basic Auth
+    // credentials. It is fed to curl through stdin so the password never
+    // appears in argv (world-readable via `ps`). Backslashes and quotes
+    // are escaped per curl's config-file quoting rules.
+    function curlCredConfig() {
+        const esc = function (s) {
+            return s.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")
         }
-        return "data:image/jpeg;base64," + Qt.btoa(binary)
+        return "user = \"" + esc(authUsername) + ":" + esc(authPassword) + "\""
+    }
+
+    // SEC-4: result handler for the authenticated curl fetch. Empty output
+    // means curl failed (HTTP error, network failure, or timeout).
+    function handleFrameFetch(base64Text) {
+        if (!streaming || !waitingFrame) return
+        // ROB-3: drop a result delivered by a superseded fetch cycle.
+        if (frameFetchGen !== requestGeneration) return
+
+        if (!base64Text || base64Text.length === 0) {
+            handleFrameError(frameFetchGen)
+            return
+        }
+        assignSource("data:image/jpeg;base64," + base64Text)
     }
 
     function assignSource(url) {
@@ -217,44 +225,28 @@ Item {
             return
         }
 
-        // AUTH: fetch bytes ourselves so we can attach the Authorization header.
-        const xhr = new XMLHttpRequest()
-        inFlightXhr = xhr
-        xhr.open("GET", url)
-        xhr.responseType = "arraybuffer"
-        xhr.timeout = 7000
+        // AUTH: QML's XMLHttpRequest cannot return binary reliably — its
+        // responseType is read-only, so xhr.response arrives as a (mangled)
+        // string. Fetch with curl instead: it handles HTTPS + Basic Auth,
+        // and piping through base64 turns the JPEG into text we wrap in a
+        // data: URI. Credentials reach curl via a stdin config, not argv.
+        frameFetchGen = generation
+        frameFetch.environment = ({
+            "NF_URL": snapshotBaseUrl,
+            "NF_CRED": curlCredConfig()
+        })
+        frameFetch.running = true
+    }
 
-        // UTF-8-encode credentials so non-ASCII passwords survive base64.
-        const credentials = unescape(encodeURIComponent(authUsername + ":" + authPassword))
-        xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(credentials))
-
-        xhr.ontimeout = function () {
-            if (generation !== root.requestGeneration) return
-            root.inFlightXhr = null
-            root.handleFrameError(generation)
+    // SEC-4: authenticated frame fetch. curl downloads the JPEG and base64
+    // encodes it; on any HTTP/network failure curl writes nothing, so an
+    // empty payload is treated as a frame error by handleFrameFetch.
+    Process {
+        id: frameFetch
+        command: ["sh", "-c", "printf '%s' \"$NF_CRED\" | curl -sf -m 7 --config - \"$NF_URL\" | base64 | tr -d '\\r\\n'"]
+        stdout: StdioCollector {
+            onStreamFinished: root.handleFrameFetch(text)
         }
-
-        xhr.onreadystatechange = function () {
-            if (xhr.readyState !== XMLHttpRequest.DONE) return
-            if (generation !== root.requestGeneration) return
-            root.inFlightXhr = null
-
-            const status = xhr.status
-            if (status === 0 || status < 200 || status >= 300) {
-                // HTTP error or network failure.
-                root.handleFrameError(generation)
-                return
-            }
-
-            try {
-                const dataUri = root.arrayBufferToDataUri(xhr.response)
-                root.assignSource(dataUri)
-            } catch (e) {
-                root.handleFrameError(generation)
-            }
-        }
-
-        xhr.send()
     }
 
     function handleFrameReady(imageItem, loadedBufferIsA, bufferGen) {
