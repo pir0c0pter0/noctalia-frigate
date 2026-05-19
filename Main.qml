@@ -1,4 +1,5 @@
 import QtQuick
+import "Translation.js" as Translation
 
 Item {
     id: root
@@ -15,12 +16,22 @@ Item {
     property string testResultMessage: ""
     property string testResultStatus: ""
 
+    // Seeded from pluginSettings; kept in sync explicitly by Settings.qml saveSettings() (intentional, not readonly).
     property var selectedCameras: pluginApi?.pluginSettings?.selectedCameras ?? []
     property int currentIndex: 0
 
+    // Independent per-operation request generations; each stale callback compares
+    // against ONLY its own counter so a background poll cannot invalidate a
+    // foreground test/fetch (and vice versa).
+    property int testGeneration: 0
+    property int fetchGeneration: 0
+    property int pollGeneration: 0
+    // In-flight poll XHR, kept for single-flight abort.
+    property var pollXhr: null
+
     readonly property string currentCameraName: {
         if (selectedCameras.length === 0) return ""
-        var idx = Math.min(currentIndex, selectedCameras.length - 1)
+        const idx = Math.min(currentIndex, selectedCameras.length - 1)
         return selectedCameras[idx] ?? ""
     }
 
@@ -30,23 +41,7 @@ Item {
     signal testCompleted(string status, string message)
 
     function tr(key, params) {
-        var value = pluginApi?.tr(key)
-        if (value === undefined || value === null) {
-            value = key
-        }
-        value = String(value)
-        if (/^!!.*!!$/.test(value)) {
-            value = key
-        }
-        if (!params) {
-            return value
-        }
-        return value.replace(/\{([a-zA-Z0-9_]+)\}/g, function(match, name) {
-            if (Object.prototype.hasOwnProperty.call(params, name)) {
-                return String(params[name])
-            }
-            return match
-        })
+        return Translation.tr(pluginApi, key, params)
     }
 
     function indexForCamera(cameraName) {
@@ -54,7 +49,7 @@ Item {
     }
 
     function defaultCameraIndex() {
-        var idx = indexForCamera(defaultCamera)
+        const idx = indexForCamera(defaultCamera)
         return idx !== -1 ? idx : 0
     }
 
@@ -78,35 +73,30 @@ Item {
 
     function buildAuthUrl(path) {
         if (!frigateUrl || !currentCameraName) return ""
-        var base = frigateUrl.replace(/\/+$/, "")
-        if (username && password) {
-            var protocol = base.startsWith("https") ? "https" : "http"
-            var rest = base.replace(/^https?:\/\//, "")
-            var encodedUser = encodeURIComponent(username)
-            var encodedPass = encodeURIComponent(password)
-            return protocol + "://" + encodedUser + ":" + encodedPass + "@" + rest + path
-        }
+        // Never embed credentials in the URL; callers authenticate their own requests.
+        const base = frigateUrl.replace(/\/+$/, "")
         return base + path
     }
 
     function nextCamera() {
-        var count = selectedCameras.length
+        const count = selectedCameras.length
         if (count === 0) return
         currentIndex = (currentIndex + 1) % count
     }
 
     function prevCamera() {
-        var count = selectedCameras.length
+        const count = selectedCameras.length
         if (count === 0) return
         currentIndex = (currentIndex - 1 + count) % count
     }
 
     function makeAuthRequest(url, callback) {
-        var xhr = new XMLHttpRequest()
+        const xhr = new XMLHttpRequest()
+        xhr.timeout = 10000
         xhr.onreadystatechange = function() {
             if (xhr.readyState === XMLHttpRequest.DONE) {
                 if (xhr.status >= 200 && xhr.status < 300) {
-                    var text = xhr.responseText
+                    const text = xhr.responseText
                     try {
                         callback(null, JSON.parse(text), xhr.status)
                     } catch (e) {
@@ -124,11 +114,17 @@ Item {
                 }
             }
         }
+        xhr.ontimeout = function() {
+            callback(root.tr("cannotReachServer"), null, 0)
+        }
         xhr.open("GET", url, true)
         if (username && password) {
-            xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(username + ":" + password))
+            // UTF-8-encode the credential string so non-ASCII passwords survive base64.
+            const credentials = unescape(encodeURIComponent(username + ":" + password))
+            xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(credentials))
         }
         xhr.send()
+        return xhr
     }
 
     function testConnection() {
@@ -141,14 +137,17 @@ Item {
         testResultMessage = root.tr("testing")
         testResultStatus = "testing"
 
-        var url = frigateUrl.replace(/\/+$/, "") + "/api/version"
+        const generation = ++root.testGeneration
+        const url = frigateUrl.replace(/\/+$/, "") + "/api/version"
         makeAuthRequest(url, function(err, data) {
+            if (generation !== root.testGeneration) return
             if (err) {
                 testResultMessage = err
                 testResultStatus = "error"
                 root.connectionStatus = "disconnected"
             } else {
-                var version = data.version ?? data ?? "unknown"
+                // /api/version may return JSON or plain text.
+                const version = (data && data.version) ? data.version : (data ?? "unknown")
                 testResultMessage = root.tr("connectedVersion", {
                     "version": version
                 })
@@ -166,8 +165,10 @@ Item {
             return
         }
 
-        var url = frigateUrl.replace(/\/+$/, "") + "/api/config"
+        const generation = ++root.fetchGeneration
+        const url = frigateUrl.replace(/\/+$/, "") + "/api/config"
         makeAuthRequest(url, function(err, data) {
+            if (generation !== root.fetchGeneration) return
             if (err) {
                 testResultMessage = root.tr("fetchCamerasFailed", {
                     "error": err
@@ -175,8 +176,17 @@ Item {
                 testResultStatus = "error"
                 return
             }
-            var cameras = data.cameras ? Object.keys(data.cameras) : []
-            var filtered = cameras.filter(function(name) {
+            // /api/config must return a JSON object with a `cameras` field;
+            // a non-JSON / unexpected payload (raw text passthrough) is a failure.
+            if (typeof data !== "object" || data === null || typeof data.cameras !== "object" || data.cameras === null) {
+                testResultMessage = root.tr("fetchCamerasFailed", {
+                    "error": root.tr("invalidResponse")
+                })
+                testResultStatus = "error"
+                return
+            }
+            const cameras = Object.keys(data.cameras)
+            const filtered = cameras.filter(function(name) {
                 return name !== "birdseye"
             })
             root.cameraList = filtered
@@ -189,8 +199,20 @@ Item {
             connectionStatus = "disconnected"
             return
         }
-        var url = frigateUrl.replace(/\/+$/, "") + "/api/version"
-        makeAuthRequest(url, function(err) {
+        // Bump the poll generation BEFORE aborting: an aborted XHR still fires
+        // onreadystatechange with readyState === DONE and status === 0, which
+        // would otherwise mark the connection "disconnected". Incrementing first
+        // ensures that stale abort callback fails its generation check.
+        const generation = ++root.pollGeneration
+        // Single-flight: abort any still-pending poll before starting a new one.
+        if (root.pollXhr !== null) {
+            root.pollXhr.abort()
+            root.pollXhr = null
+        }
+        const url = frigateUrl.replace(/\/+$/, "") + "/api/version"
+        root.pollXhr = makeAuthRequest(url, function(err) {
+            if (generation !== root.pollGeneration) return
+            root.pollXhr = null
             root.connectionStatus = err ? "disconnected" : "connected"
         })
     }

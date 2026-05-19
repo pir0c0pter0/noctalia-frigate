@@ -1,11 +1,15 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
 import qs.Commons
 import qs.Widgets
+import "Translation.js" as Translation
 
 ColumnLayout {
     id: root
+
     property var pluginApi: null
 
     readonly property var mainInst: pluginApi?.mainInstance ?? null
@@ -15,28 +19,14 @@ ColumnLayout {
     property string editPassword: pluginApi?.pluginSettings?.password ?? ""
     property string editDefaultCamera: pluginApi?.pluginSettings?.defaultCamera ?? ""
     property var editSelectedCameras: {
-        var saved = pluginApi?.pluginSettings?.selectedCameras
+        const saved = pluginApi?.pluginSettings?.selectedCameras
         return saved ? Array.from(saved) : []
     }
 
+    spacing: Style.marginM
+
     function tr(key, params) {
-        var value = pluginApi?.tr(key)
-        if (value === undefined || value === null) {
-            value = key
-        }
-        value = String(value)
-        if (/^!!.*!!$/.test(value)) {
-            value = key
-        }
-        if (!params) {
-            return value
-        }
-        return value.replace(/\{([a-zA-Z0-9_]+)\}/g, function(match, name) {
-            if (Object.prototype.hasOwnProperty.call(params, name)) {
-                return String(params[name])
-            }
-            return match
-        })
+        return Translation.tr(pluginApi, key, params)
     }
 
     function syncDefaultCamera() {
@@ -49,6 +39,25 @@ ColumnLayout {
         }
     }
 
+    function reconcileCameras() {
+        // A camera removed from Frigate must not stay selected with no
+        // checkbox row to deselect it -- prune to the current list.
+        const list = mainInst?.cameraList ?? []
+        const pruned = editSelectedCameras.filter(function (cam) {
+            return list.indexOf(cam) !== -1
+        })
+        if (pruned.length !== editSelectedCameras.length) {
+            editSelectedCameras = pruned
+            // Orphan(s) actually removed -- persist immediately so the saved
+            // settings and the running Main instance drop them too, instead
+            // of lingering until the next manual Save.
+            syncDefaultCamera()
+            saveSettings()
+            return
+        }
+        syncDefaultCamera()
+    }
+
     function saveSettings() {
         if (!pluginApi) return
         syncDefaultCamera()
@@ -56,10 +65,11 @@ ColumnLayout {
         pluginApi.pluginSettings.username = editUsername
         pluginApi.pluginSettings.password = editPassword
         pluginApi.pluginSettings.selectedCameras = editSelectedCameras
-        pluginApi.pluginSettings.cameraOrder = editSelectedCameras
         pluginApi.pluginSettings.defaultCamera = editDefaultCamera
         pluginApi.saveSettings()
         if (mainInst) {
+            // Explicit live sync into the running Main instance -- intentional,
+            // keeps the open panel in step with freshly saved settings.
             mainInst.selectedCameras = editSelectedCameras
             mainInst.resetToDefaultCamera()
         }
@@ -70,8 +80,8 @@ ColumnLayout {
     }
 
     function toggleCamera(camName) {
-        var idx = editSelectedCameras.indexOf(camName)
-        var updated = Array.from(editSelectedCameras)
+        const idx = editSelectedCameras.indexOf(camName)
+        const updated = Array.from(editSelectedCameras)
         if (idx !== -1) {
             updated.splice(idx, 1)
         } else {
@@ -81,9 +91,26 @@ ColumnLayout {
         syncDefaultCamera()
     }
 
-    Component.onCompleted: syncDefaultCamera()
+    Component.onCompleted: {
+        // Re-seed the edit buffers explicitly: the property bindings to
+        // pluginApi.pluginSettings.* break on the first user edit, so they
+        // cannot be relied on for initialization.
+        editUrl = pluginApi?.pluginSettings?.frigateUrl ?? ""
+        editUsername = pluginApi?.pluginSettings?.username ?? ""
+        editPassword = pluginApi?.pluginSettings?.password ?? ""
+        editDefaultCamera = pluginApi?.pluginSettings?.defaultCamera ?? ""
+        const saved = pluginApi?.pluginSettings?.selectedCameras
+        editSelectedCameras = saved ? Array.from(saved) : []
+        syncDefaultCamera()
+    }
 
-    spacing: Style.marginM
+    // Prune orphaned cameras whenever the camera list is re-fetched.
+    Connections {
+        target: root.mainInst
+        function onCameraListChanged() {
+            root.reconcileCameras()
+        }
+    }
 
     // ─── Connection ───
     NLabel {
@@ -91,125 +118,34 @@ ColumnLayout {
         description: root.tr("connectionDescription")
     }
 
-    ColumnLayout {
-        Layout.fillWidth: true
-        spacing: Style.marginS
-
-        NText {
-            text: root.tr("frigateServerUrl")
-            opacity: 0.7
-            font.pixelSize: 12
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            height: 36
-            radius: Style.radiusM
-            color: Color.mSurfaceVariant
-            border.color: urlField.activeFocus ? Color.mPrimary : Color.mOutline
-            border.width: 1
-
-            TextInput {
-                id: urlField
-                anchors.fill: parent
-                anchors.margins: 8
-                verticalAlignment: TextInput.AlignVCenter
-                color: Color.mOnSurface
-                selectionColor: Color.mPrimary
-                selectedTextColor: Color.mOnPrimary
-                clip: true
-                text: root.editUrl
-                onTextChanged: root.editUrl = text
-
-                NText {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "http://192.168.1.100:5000"
-                    visible: !urlField.text && !urlField.activeFocus
-                    opacity: 0.4
-                }
-            }
-        }
+    LabeledTextField {
+        label: root.tr("frigateServerUrl")
+        placeholder: root.tr("urlPlaceholder")
+        text: root.editUrl
+        onTextChanged: root.editUrl = text
     }
 
-    ColumnLayout {
-        Layout.fillWidth: true
-        spacing: Style.marginS
-
-        NText {
-            text: root.tr("usernameOptional")
-            opacity: 0.7
-            font.pixelSize: 12
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            height: 36
-            radius: Style.radiusM
-            color: Color.mSurfaceVariant
-            border.color: userField.activeFocus ? Color.mPrimary : Color.mOutline
-            border.width: 1
-
-            TextInput {
-                id: userField
-                anchors.fill: parent
-                anchors.margins: 8
-                verticalAlignment: TextInput.AlignVCenter
-                color: Color.mOnSurface
-                selectionColor: Color.mPrimary
-                selectedTextColor: Color.mOnPrimary
-                clip: true
-                text: root.editUsername
-                onTextChanged: root.editUsername = text
-
-                NText {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: root.tr("leaveBlankIfNoAuth")
-                    visible: !userField.text && !userField.activeFocus
-                    opacity: 0.4
-                }
-            }
-        }
+    LabeledTextField {
+        label: root.tr("usernameOptional")
+        placeholder: root.tr("leaveBlankIfNoAuth")
+        text: root.editUsername
+        onTextChanged: root.editUsername = text
     }
 
-    ColumnLayout {
-        Layout.fillWidth: true
-        spacing: Style.marginS
+    LabeledTextField {
+        id: passwordField
+        label: root.tr("passwordOptional")
+        placeholder: root.tr("leaveBlankIfNoAuth")
+        echoMode: TextInput.Password
+        text: root.editPassword
+        onTextChanged: root.editPassword = text
+    }
 
-        NText {
-            text: root.tr("passwordOptional")
-            opacity: 0.7
-            font.pixelSize: 12
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            height: 36
-            radius: Style.radiusM
-            color: Color.mSurfaceVariant
-            border.color: passField.activeFocus ? Color.mPrimary : Color.mOutline
-            border.width: 1
-
-            TextInput {
-                id: passField
-                anchors.fill: parent
-                anchors.margins: 8
-                verticalAlignment: TextInput.AlignVCenter
-                color: Color.mOnSurface
-                selectionColor: Color.mPrimary
-                selectedTextColor: Color.mOnPrimary
-                clip: true
-                echoMode: TextInput.Password
-                text: root.editPassword
-                onTextChanged: root.editPassword = text
-
-                NText {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: root.tr("leaveBlankIfNoAuth")
-                    visible: !passField.text && !passField.activeFocus
-                    opacity: 0.4
-                }
-            }
-        }
+    // SEC-2: make the plaintext storage of the password explicit to the user.
+    NText {
+        text: root.tr("passwordPlaintextWarning")
+        opacity: 0.5
+        font.pixelSize: 11
     }
 
     // ─── Buttons ───
@@ -219,10 +155,28 @@ ColumnLayout {
         spacing: Style.marginS
 
         Rectangle {
+            id: saveButton
+
+            function activate() {
+                root.saveSettings()
+                saveStatus.text = root.tr("saved")
+                saveStatusTimer.restart()
+            }
+
             Layout.preferredWidth: saveLabel.width + 24
             Layout.preferredHeight: 32
             color: saveMouseArea.containsMouse ? Qt.darker(Color.mPrimary, 1.1) : Color.mPrimary
             radius: Style.radiusM
+            border.color: Color.mOnPrimary
+            border.width: saveButton.activeFocus ? 2 : 0
+
+            activeFocusOnTab: true
+            Accessible.role: Accessible.Button
+            Accessible.name: root.tr("save")
+            Accessible.onPressAction: saveButton.activate()
+            Keys.onReturnPressed: saveButton.activate()
+            Keys.onEnterPressed: saveButton.activate()
+            Keys.onSpacePressed: saveButton.activate()
 
             NText {
                 id: saveLabel
@@ -236,21 +190,32 @@ ColumnLayout {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    root.saveSettings()
-                    saveStatus.text = root.tr("saved")
-                    saveStatusTimer.restart()
-                }
+                onClicked: saveButton.activate()
             }
         }
 
         Rectangle {
+            id: testButton
+
+            function activate() {
+                root.saveSettings()
+                if (root.mainInst) root.mainInst.testConnection()
+            }
+
             Layout.preferredWidth: testLabel.width + 24
             Layout.preferredHeight: 32
             color: testMouseArea.containsMouse ? Color.mOutline : Color.mSurfaceVariant
             radius: Style.radiusM
-            border.color: Color.mOutline
-            border.width: 1
+            border.color: testButton.activeFocus ? Color.mPrimary : Color.mOutline
+            border.width: testButton.activeFocus ? 2 : 1
+
+            activeFocusOnTab: true
+            Accessible.role: Accessible.Button
+            Accessible.name: root.tr("testConnection")
+            Accessible.onPressAction: testButton.activate()
+            Keys.onReturnPressed: testButton.activate()
+            Keys.onEnterPressed: testButton.activate()
+            Keys.onSpacePressed: testButton.activate()
 
             NText {
                 id: testLabel
@@ -263,20 +228,32 @@ ColumnLayout {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    root.saveSettings()
-                    if (mainInst) mainInst.testConnection()
-                }
+                onClicked: testButton.activate()
             }
         }
 
         Rectangle {
+            id: listButton
+
+            function activate() {
+                root.saveSettings()
+                if (root.mainInst) root.mainInst.fetchCameras()
+            }
+
             Layout.preferredWidth: listLabel.width + 24
             Layout.preferredHeight: 32
             color: listMouseArea.containsMouse ? Color.mOutline : Color.mSurfaceVariant
             radius: Style.radiusM
-            border.color: Color.mOutline
-            border.width: 1
+            border.color: listButton.activeFocus ? Color.mPrimary : Color.mOutline
+            border.width: listButton.activeFocus ? 2 : 1
+
+            activeFocusOnTab: true
+            Accessible.role: Accessible.Button
+            Accessible.name: root.tr("listCameras")
+            Accessible.onPressAction: listButton.activate()
+            Keys.onReturnPressed: listButton.activate()
+            Keys.onEnterPressed: listButton.activate()
+            Keys.onSpacePressed: listButton.activate()
 
             NText {
                 id: listLabel
@@ -289,10 +266,7 @@ ColumnLayout {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    root.saveSettings()
-                    if (mainInst) mainInst.fetchCameras()
-                }
+                onClicked: listButton.activate()
             }
         }
 
@@ -312,15 +286,15 @@ ColumnLayout {
     // ─── Test Result ───
     NText {
         Layout.fillWidth: true
-        text: mainInst?.testResultMessage ?? ""
+        text: root.mainInst?.testResultMessage ?? ""
         color: {
-            var s = mainInst?.testResultStatus ?? ""
+            const s = root.mainInst?.testResultStatus ?? ""
             if (s === "ok") return Color.mPrimary
             if (s === "error") return Color.mError
             return Color.mOnSurface
         }
         wrapMode: Text.Wrap
-        visible: (mainInst?.testResultMessage ?? "") !== ""
+        visible: (root.mainInst?.testResultMessage ?? "") !== ""
     }
 
     // ─── Camera Selection ───
@@ -332,52 +306,65 @@ ColumnLayout {
 
     Repeater {
         id: cameraRepeater
-        model: mainInst?.cameraList ?? []
+        model: root.mainInst?.cameraList ?? []
 
         delegate: RowLayout {
+            id: cameraRow
+
             required property string modelData
-            required property int index
+
+            function activate() {
+                root.toggleCamera(cameraRow.modelData)
+                root.saveSettings()
+            }
+
             Layout.fillWidth: true
             spacing: Style.marginS
 
             Rectangle {
+                id: cameraCheckbox
                 width: 20
                 height: 20
                 radius: 4
-                color: root.isCameraSelected(modelData) ? Color.mPrimary : "transparent"
-                border.color: root.isCameraSelected(modelData) ? Color.mPrimary : Color.mOutline
-                border.width: 2
+                color: root.isCameraSelected(cameraRow.modelData) ? Color.mPrimary : "transparent"
+                border.color: cameraCheckbox.activeFocus
+                              ? Color.mPrimary
+                              : (root.isCameraSelected(cameraRow.modelData) ? Color.mPrimary : Color.mOutline)
+                border.width: cameraCheckbox.activeFocus ? 3 : 2
+
+                activeFocusOnTab: true
+                Accessible.role: Accessible.CheckBox
+                Accessible.name: cameraRow.modelData
+                Accessible.checked: root.isCameraSelected(cameraRow.modelData)
+                Accessible.onPressAction: cameraRow.activate()
+                Keys.onReturnPressed: cameraRow.activate()
+                Keys.onEnterPressed: cameraRow.activate()
+                Keys.onSpacePressed: cameraRow.activate()
 
                 NText {
                     anchors.centerIn: parent
-                    text: "\u2713"
+                    text: "✓"
                     color: Color.mOnPrimary
                     font.pixelSize: 12
                     font.bold: true
-                    visible: root.isCameraSelected(modelData)
+                    visible: root.isCameraSelected(cameraRow.modelData)
                 }
 
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        root.toggleCamera(modelData)
-                        root.saveSettings()
-                    }
+                    onClicked: cameraRow.activate()
                 }
             }
 
             NText {
-                text: modelData
+                text: cameraRow.modelData
                 Layout.fillWidth: true
 
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        root.toggleCamera(modelData)
-                        root.saveSettings()
-                    }
+                    onClicked: cameraRow.activate()
                 }
             }
         }
@@ -385,7 +372,7 @@ ColumnLayout {
 
     NText {
         text: root.tr("camerasSelected", {
-            "count": editSelectedCameras.length
+            "count": root.editSelectedCameras.length
         })
         opacity: 0.5
         visible: cameraRepeater.count > 0
@@ -394,12 +381,12 @@ ColumnLayout {
     NLabel {
         label: root.tr("defaultCamera")
         description: root.tr("defaultCameraHint")
-        visible: editSelectedCameras.length > 0
+        visible: root.editSelectedCameras.length > 0
     }
 
     ComboBox {
         Layout.fillWidth: true
-        visible: editSelectedCameras.length > 0
+        visible: root.editSelectedCameras.length > 0
         model: root.editSelectedCameras
         currentIndex: Math.max(0, root.editSelectedCameras.indexOf(root.editDefaultCamera))
         onActivated: {

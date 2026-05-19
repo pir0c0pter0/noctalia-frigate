@@ -2,7 +2,7 @@
 
 # Frigate Viewer
 
-**Live camera streaming from [Frigate NVR](https://frigate.video) directly in your [Noctalia Shell](https://github.com/noctalia-dev/noctalia-shell) desktop bar.**
+**Live camera snapshot preview from [Frigate NVR](https://frigate.video) directly in your [Noctalia Shell](https://github.com/noctalia-dev/noctalia-shell) desktop bar.**
 
 [![Noctalia](https://img.shields.io/badge/Noctalia-4.4%2B-blue?style=flat-square)](https://github.com/noctalia-dev/noctalia-shell)
 [![Frigate](https://img.shields.io/badge/Frigate-0.9%2B-green?style=flat-square)](https://frigate.video)
@@ -17,18 +17,18 @@ One click to see your cameras. Arrows to navigate. No browser needed.
 
 ## Overview
 
-Frigate Viewer is a Noctalia Shell plugin that puts your security cameras one click away. It streams live MJPEG video from your Frigate NVR instance in a compact floating panel, with quick navigation between cameras and real-time connection status in the bar.
+Frigate Viewer is a Noctalia Shell plugin that puts your security cameras one click away. It polls live JPEG snapshots from your Frigate NVR instance (refreshed about once per second) in a compact floating panel, with quick navigation between cameras and real-time connection status in the bar.
 
 ### Key Features
 
-- **Live MJPEG Streaming** — Real-time video from Frigate cameras using native QML Image rendering
+- **Live Snapshot Preview** — Polls the latest JPEG snapshot from Frigate cameras (~1 fps) into native QML Image buffers
 - **Bar Widget with Status** — Camera icon with green/red connection status dot and dynamic tooltip
 - **Camera Navigation** — Left/right buttons to cycle through selected cameras
 - **Settings UI** — Configure Frigate URL, optional Basic Auth credentials, test connection, and discover cameras
 - **Camera Selection** — Choose which cameras appear in the viewer via checkboxes
 - **Default Startup Camera** — Pick which selected camera opens first when clicking the widget icon
 - **Persistence** — All settings and camera selections survive restarts
-- **i18n** — Automatic English and pt-BR translations for Noctalia and Plasma 6
+- **i18n** — Automatic English and pt-BR translations for Noctalia
 - **Theme Compliance** — Zero hardcoded colors; all styling via Noctalia theme tokens
 
 ## Requirements
@@ -91,6 +91,8 @@ cp -r noctalia-frigate ~/.config/noctalia/plugins/noctalia-frigate
 
 > **Note:** Frigate's native JWT authentication (port 8971) is **not supported**. Use port 5000 (unauthenticated) or a reverse proxy with Basic Auth (nginx, Traefik, Caddy).
 
+> **Security:** Basic Auth over plain `http://` transmits your username and password in cleartext on every request. For any non-trusted network, use HTTPS — it is strongly recommended whenever Basic Auth is enabled.
+
 ## Usage
 
 ### Bar Widget
@@ -102,25 +104,28 @@ cp -r noctalia-frigate ~/.config/noctalia/plugins/noctalia-frigate
 
 ### Viewer Panel
 
-- **Live stream** from the currently selected camera
+- **Live snapshot preview** from the currently selected camera, refreshed ~1 fps
 - **Camera name** displayed in the header
 - **Left/Right arrows** to navigate between cameras (visible when 2+ cameras selected)
 - **Default camera reset on open** so each click starts on your preferred camera
 - **Auto-reconnect** when reopening the panel
-- **Resource-friendly**: stream stops when panel is closed
+- **Resource-friendly**: snapshot polling stops when panel is closed
 
 ## Architecture
 
 ```
-manifest.json          Plugin identity + default settings
-Main.qml               State hub: connection, cameras, stream URL, navigation
-BarWidget.qml           Bar icon + status dot + tooltip + panel toggle
-Panel.qml              MJPEG viewer + navigation + error states
-Settings.qml           Connection config + camera selection + default camera
-i18n/en.json           English translations
-i18n/pt.json           Portuguese translations
-i18n/pt_BR.json        pt-BR locale alias
-i18n/pt-BR.json        pt-BR locale alias
+noctalia-frigate/
+├── manifest.json        # Plugin identity + default settings
+├── Main.qml             # State hub: connection, cameras, snapshot URL, navigation
+├── BarWidget.qml        # Bar icon + status dot + tooltip + panel toggle
+├── Panel.qml            # Snapshot preview + navigation + error states
+├── Settings.qml         # Connection config + camera selection + default camera
+├── Translation.js       # Shared i18n helper
+├── LabeledTextField.qml # Reusable labeled settings input
+├── i18n/
+│   ├── en.json          # English translations
+│   └── pt-BR.json       # Portuguese (pt-BR) translations
+└── .planning/           # Development planning docs
 ```
 
 ### Data Flow
@@ -128,9 +133,9 @@ i18n/pt-BR.json        pt-BR locale alias
 ```
 Main.qml (state hub)
   ├── BarWidget.qml reads: connectionStatus
-  ├── Panel.qml reads: streamUrl, currentCameraName, selectedCameras
+  ├── Panel.qml reads: snapshotBaseUrl, currentCameraName, selectedCameras
   ├── Settings.qml writes: frigateUrl, username, password, selectedCameras, defaultCamera
-  └── Frigate API: /api/version, /api/config, /api/<camera>?fps=5
+  └── Frigate API: /api/version, /api/config, /api/<camera>/latest.jpg
 ```
 
 ### Frigate API Endpoints Used
@@ -139,7 +144,7 @@ Main.qml (state hub)
 |----------|---------|
 | `GET /api/version` | Connection test + health polling (30s interval) |
 | `GET /api/config` | Discover camera names |
-| `GET /api/<camera>?fps=5` | MJPEG live stream |
+| `GET /api/<camera>/latest.jpg` | Camera snapshot (polled ~1 fps) |
 
 ## Development
 
@@ -155,34 +160,11 @@ NOCTALIA_DEBUG=1 qs -c noctalia-shell --no-duplicate
 
 Changes to QML files are picked up on save.
 
-## KDE Plasma 6 Port
-
-The complete Plasma 6 port is available in:
-
-- `port-kde-plasma6/README.md`
-
-It includes the full plasmoid package, installation scripts, feature-parity baseline, and test matrix.
-
-### Project Structure
-
-```
-noctalia-frigate/
-├── manifest.json        # Plugin manifest
-├── Main.qml             # State hub + API logic
-├── BarWidget.qml        # Bar widget
-├── Panel.qml            # Viewer panel
-├── Settings.qml         # Settings form
-├── i18n/
-│   ├── en.json          # English
-│   └── pt.json          # Portuguese
-└── .planning/           # Development planning docs
-```
-
 ## Limitations
 
 - **Single Frigate server** — v1 supports one Frigate instance
 - **No JWT auth** — Frigate's native JWT (port 8971) is incompatible with QML Image; use port 5000 or a Basic Auth proxy
-- **No audio** — MJPEG is video-only
+- **No audio** — the preview shows still JPEG snapshots only
 - **No recording playback** — Use Frigate's web UI for event history
 - **No PTZ controls** — Use Frigate's web UI for camera controls
 

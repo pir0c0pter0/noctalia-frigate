@@ -4,6 +4,7 @@ import Quickshell
 import qs.Commons
 import qs.Widgets
 import qs.Services.UI
+import "Translation.js" as Translation
 
 Item {
     id: root
@@ -27,16 +28,8 @@ Item {
     implicitWidth: visualCapsule.width
     implicitHeight: visualCapsule.height
 
-    function tr(key, fallback) {
-        var value = pluginApi?.tr(key)
-        if (value === undefined || value === null) {
-            return fallback ?? key
-        }
-        value = String(value)
-        if (/^!!.*!!$/.test(value)) {
-            return fallback ?? key
-        }
-        return value
+    function tr(key, params) {
+        return Translation.tr(pluginApi, key, params)
     }
 
     NPopupContextMenu {
@@ -44,12 +37,12 @@ Item {
 
         model: [
             {
-                "label": root.tr("testConnection", "Test Connection"),
+                "label": root.tr("testConnection"),
                 "action": "test",
                 "icon": "plug-connected"
             },
             {
-                "label": root.tr("settings", "Settings"),
+                "label": root.tr("settings"),
                 "action": "settings",
                 "icon": "settings"
             }
@@ -85,13 +78,15 @@ Item {
 
         Rectangle {
             id: statusDot
-            anchors.bottom: parent.bottom
-            anchors.right: parent.right
-            anchors.bottomMargin: 2
-            anchors.rightMargin: 2
-            width: 6
-            height: 6
-            radius: 3
+            anchors {
+                bottom: parent.bottom
+                right: parent.right
+                bottomMargin: 2 * Style.uiScaleRatio
+                rightMargin: 2 * Style.uiScaleRatio
+            }
+            width: 6 * Style.uiScaleRatio
+            height: 6 * Style.uiScaleRatio
+            radius: width / 2
             color: root.isConnected ? Color.mPrimary : Color.mError
         }
     }
@@ -112,8 +107,8 @@ Item {
         }
 
         onEntered: {
-            var key = root.isConnected ? "tooltipConnected" : "tooltipDisconnected"
-            var tooltip = root.tr(key, root.isConnected ? "Frigate Viewer \u2014 Connected" : "Frigate Viewer \u2014 Disconnected")
+            const key = root.isConnected ? "tooltipConnected" : "tooltipDisconnected"
+            const tooltip = root.tr(key)
             TooltipService.show(
                 root,
                 tooltip,
