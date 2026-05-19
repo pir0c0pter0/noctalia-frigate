@@ -5,7 +5,7 @@
   "urlPlaceholder": "http://192.168.1.100:5000",
   "usernameOptional": "Usu\u00e1rio (opcional)",
   "passwordOptional": "Senha (opcional)",
-  "passwordPlaintextWarning": "Armazenada localmente em texto puro",
+  "passwordStorageNote": "Guardada no keyring do sistema, não em texto puro",
   "leaveBlankIfNoAuth": "Deixe em branco se n\u00e3o usar autentica\u00e7\u00e3o",
   "save": "Salvar",
   "saved": "Salvo!",

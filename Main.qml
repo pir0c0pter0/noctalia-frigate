@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell.Io
 import "Translation.js" as Translation
 
 Item {
@@ -6,8 +7,11 @@ Item {
     property var pluginApi: null
 
     readonly property string frigateUrl: pluginApi?.pluginSettings?.frigateUrl ?? ""
-    readonly property string username: pluginApi?.pluginSettings?.username ?? ""
-    readonly property string password: pluginApi?.pluginSettings?.password ?? ""
+    // SEC-3: credentials live in the OS keyring (Secret Service), never in
+    // pluginSettings/settings.json. Loaded asynchronously at startup and
+    // updated in place by Settings.qml via applyCredentials() on save.
+    property string username: ""
+    property string password: ""
     readonly property string defaultCamera: pluginApi?.pluginSettings?.defaultCamera ?? ""
     readonly property bool isPanelOpen: pluginApi?.panelOpenScreen !== null
 
@@ -241,10 +245,96 @@ Item {
         onTriggered: root.pollConnection()
     }
 
+    // ─── Credential keyring (Secret Service via secret-tool) ───
+    // SEC-3: username/password are kept in the OS keyring, never written to
+    // settings.json. Reads run once at startup; writes run when Settings
+    // saves. All access goes through `sh -c` so PATH resolves secret-tool;
+    // the secret is handed to the store process via its environment, never
+    // on the command line (argv is world-readable via `ps`).
+    readonly property string keyringService: "noctalia-frigate"
+
+    // Counts the two startup lookups so the first poll waits for credentials.
+    property int credentialLookupsPending: 0
+
+    function loadCredentials() {
+        root.credentialLookupsPending = 2
+        usernameLookup.running = true
+        passwordLookup.running = true
+    }
+
+    function noteCredentialLookupDone() {
+        if (root.credentialLookupsPending > 0) {
+            root.credentialLookupsPending--
+        }
+        if (root.credentialLookupsPending === 0 && root.frigateUrl) {
+            root.pollConnection()
+        }
+    }
+
+    // Persist credentials to the keyring and update the in-memory copy so an
+    // already-open panel picks them up immediately. An empty value clears
+    // the corresponding keyring entry.
+    function applyCredentials(user, pass) {
+        root.username = user
+        root.password = pass
+        usernameStore.environment = ({
+            "NF_SECRET": user
+        })
+        passwordStore.environment = ({
+            "NF_SECRET": pass
+        })
+        usernameStore.running = true
+        passwordStore.running = true
+    }
+
+    Process {
+        id: usernameLookup
+        command: ["sh", "-c", "secret-tool lookup service " + root.keyringService + " key username"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.username = text
+                root.noteCredentialLookupDone()
+            }
+        }
+    }
+
+    Process {
+        id: passwordLookup
+        command: ["sh", "-c", "secret-tool lookup service " + root.keyringService + " key password"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.password = text
+                root.noteCredentialLookupDone()
+            }
+        }
+    }
+
+    // SEC-3: store pipes the secret through stdin (printf | secret-tool) so it
+    // never appears in argv; an empty value clears the entry instead.
+    Process {
+        id: usernameStore
+        command: ["sh", "-c", "if [ -n \"$NF_SECRET\" ]; then printf '%s' \"$NF_SECRET\" | secret-tool store --label='Noctalia Frigate (username)' service " + root.keyringService + " key username; else secret-tool clear service " + root.keyringService + " key username || true; fi"]
+        onExited: code => {
+            if (code !== 0) {
+                console.warn("noctalia-frigate: failed to store username in keyring (exit " + code + ")")
+            }
+        }
+    }
+
+    Process {
+        id: passwordStore
+        command: ["sh", "-c", "if [ -n \"$NF_SECRET\" ]; then printf '%s' \"$NF_SECRET\" | secret-tool store --label='Noctalia Frigate (password)' service " + root.keyringService + " key password; else secret-tool clear service " + root.keyringService + " key password || true; fi"]
+        onExited: code => {
+            if (code !== 0) {
+                console.warn("noctalia-frigate: failed to store password in keyring (exit " + code + ")")
+            }
+        }
+    }
+
     Component.onCompleted: {
         root.ensureValidCurrentCamera()
-        if (frigateUrl) {
-            pollConnection()
-        }
+        // pollConnection() is deferred until the keyring lookups finish
+        // (noteCredentialLookupDone) so the first poll is authenticated.
+        root.loadCredentials()
     }
 }

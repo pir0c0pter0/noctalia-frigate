@@ -15,8 +15,10 @@ ColumnLayout {
     readonly property var mainInst: pluginApi?.mainInstance ?? null
 
     property string editUrl: pluginApi?.pluginSettings?.frigateUrl ?? ""
-    property string editUsername: pluginApi?.pluginSettings?.username ?? ""
-    property string editPassword: pluginApi?.pluginSettings?.password ?? ""
+    // SEC-3: credentials come from the OS keyring via the running Main
+    // instance, not from pluginSettings.
+    property string editUsername: mainInst?.username ?? ""
+    property string editPassword: mainInst?.password ?? ""
     property string editDefaultCamera: pluginApi?.pluginSettings?.defaultCamera ?? ""
     property var editSelectedCameras: {
         const saved = pluginApi?.pluginSettings?.selectedCameras
@@ -62,12 +64,13 @@ ColumnLayout {
         if (!pluginApi) return
         syncDefaultCamera()
         pluginApi.pluginSettings.frigateUrl = editUrl.replace(/\/+$/, "")
-        pluginApi.pluginSettings.username = editUsername
-        pluginApi.pluginSettings.password = editPassword
         pluginApi.pluginSettings.selectedCameras = editSelectedCameras
         pluginApi.pluginSettings.defaultCamera = editDefaultCamera
         pluginApi.saveSettings()
         if (mainInst) {
+            // SEC-3: credentials are persisted to the OS keyring via
+            // applyCredentials(), never into pluginSettings/settings.json.
+            mainInst.applyCredentials(editUsername, editPassword)
             // Explicit live sync into the running Main instance -- intentional,
             // keeps the open panel in step with freshly saved settings.
             mainInst.selectedCameras = editSelectedCameras
@@ -96,8 +99,10 @@ ColumnLayout {
         // pluginApi.pluginSettings.* break on the first user edit, so they
         // cannot be relied on for initialization.
         editUrl = pluginApi?.pluginSettings?.frigateUrl ?? ""
-        editUsername = pluginApi?.pluginSettings?.username ?? ""
-        editPassword = pluginApi?.pluginSettings?.password ?? ""
+        // SEC-3: credentials are read back from the keyring via Main, which
+        // loads them at shell startup (well before this panel can open).
+        editUsername = mainInst?.username ?? ""
+        editPassword = mainInst?.password ?? ""
         editDefaultCamera = pluginApi?.pluginSettings?.defaultCamera ?? ""
         const saved = pluginApi?.pluginSettings?.selectedCameras
         editSelectedCameras = saved ? Array.from(saved) : []
@@ -141,9 +146,9 @@ ColumnLayout {
         onTextChanged: root.editPassword = text
     }
 
-    // SEC-2: make the plaintext storage of the password explicit to the user.
+    // SEC-3: reassure the user that credentials go to the system keyring.
     NText {
-        text: root.tr("passwordPlaintextWarning")
+        text: root.tr("passwordStorageNote")
         opacity: 0.5
         font.pixelSize: 11
     }

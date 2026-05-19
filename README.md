@@ -28,6 +28,7 @@ Frigate Viewer is a Noctalia Shell plugin that puts your security cameras one cl
 - **Camera Selection** — Choose which cameras appear in the viewer via checkboxes
 - **Default Startup Camera** — Pick which selected camera opens first when clicking the widget icon
 - **Persistence** — All settings and camera selections survive restarts
+- **Secure Credentials** — Username and password are kept in the system keyring (Secret Service), never written to disk in plain text
 - **i18n** — Automatic English and pt-BR translations for Noctalia
 - **Theme Compliance** — Zero hardcoded colors; all styling via Noctalia theme tokens
 
@@ -38,8 +39,9 @@ Frigate Viewer is a Noctalia Shell plugin that puts your security cameras one cl
 | [Noctalia Shell](https://github.com/noctalia-dev/noctalia-shell) | 4.4.0+ | Plugin host environment |
 | [Frigate NVR](https://frigate.video) | 0.9+ | Camera server |
 | Linux + niri | — | Wayland compositor |
+| libsecret (`secret-tool`) | — | Stores credentials in the system keyring |
 
-No build step required. Pure QML plugin.
+A keyring daemon (GNOME Keyring, KWallet, …) must be running for credential storage. No build step required — pure QML plugin.
 
 ## Installation
 
@@ -92,6 +94,8 @@ cp -r noctalia-frigate ~/.config/noctalia/plugins/noctalia-frigate
 > **Note:** Frigate's native JWT authentication (port 8971) is **not supported**. Use port 5000 (unauthenticated) or a reverse proxy with Basic Auth (nginx, Traefik, Caddy).
 
 > **Security:** Basic Auth over plain `http://` transmits your username and password in cleartext on every request. For any non-trusted network, use HTTPS — it is strongly recommended whenever Basic Auth is enabled.
+
+> **Credential storage:** Your username and password are stored in the system keyring via the Secret Service API (`secret-tool`) — never written to `settings.json`. A keyring daemon (GNOME Keyring, KWallet, …) must be running.
 
 ## Usage
 
