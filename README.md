@@ -40,6 +40,7 @@ Frigate Viewer is a Noctalia Shell plugin that puts your security cameras one cl
 | [Frigate NVR](https://frigate.video) | 0.9+ | Camera server |
 | Linux + niri | — | Wayland compositor |
 | libsecret (`secret-tool`) | — | Stores credentials in the system keyring |
+| curl | — | Fetches authenticated snapshots (Basic Auth setups only) |
 
 A keyring daemon (GNOME Keyring, KWallet, …) must be running for credential storage. No build step required — pure QML plugin.
 
@@ -81,6 +82,8 @@ cp -r noctalia-frigate ~/.config/noctalia/plugins/noctalia-frigate
 6. Check the cameras you want in the viewer
 7. Choose the **Default Camera** that should open first
 8. Click **Save** again
+
+> **Tip:** Enter a URL without a scheme and `https://` is prepended automatically when you leave the field — type `http://` explicitly for a local, non-TLS server. Use **Tab** to move between the URL, username, and password fields.
 
 ### Supported Connection Scenarios
 
@@ -138,7 +141,8 @@ noctalia-frigate/
 Main.qml (state hub)
   ├── BarWidget.qml reads: connectionStatus
   ├── Panel.qml reads: snapshotBaseUrl, currentCameraName, selectedCameras
-  ├── Settings.qml writes: frigateUrl, username, password, selectedCameras, defaultCamera
+  ├── Settings.qml writes: frigateUrl, selectedCameras, defaultCamera
+  ├── OS keyring (secret-tool): username + password — loaded at startup, saved on change
   └── Frigate API: /api/version, /api/config, /api/<camera>/latest.jpg
 ```
 
@@ -149,6 +153,8 @@ Main.qml (state hub)
 | `GET /api/version` | Connection test + health polling (30s interval) |
 | `GET /api/config` | Discover camera names |
 | `GET /api/<camera>/latest.jpg` | Camera snapshot (polled ~1 fps) |
+
+Without authentication the `Image` element loads the snapshot URL directly. With Basic Auth, snapshots are fetched through `curl` (piped via `base64` into a `data:` URI) because QML's `XMLHttpRequest` cannot reliably return binary data and `Image` cannot send auth headers.
 
 ## Development
 
@@ -167,7 +173,7 @@ Changes to QML files are picked up on save.
 ## Limitations
 
 - **Single Frigate server** — v1 supports one Frigate instance
-- **No JWT auth** — Frigate's native JWT (port 8971) is incompatible with QML Image; use port 5000 or a Basic Auth proxy
+- **No JWT auth** — the plugin does not implement Frigate's native JWT login flow (port 8971); use port 5000 or a reverse proxy with Basic Auth
 - **No audio** — the preview shows still JPEG snapshots only
 - **No recording playback** — Use Frigate's web UI for event history
 - **No PTZ controls** — Use Frigate's web UI for camera controls
