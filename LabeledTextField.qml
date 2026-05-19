@@ -51,6 +51,34 @@ ColumnLayout {
                 visible: !input.text && !input.activeFocus
                 opacity: 0.4
             }
+
+            // A bare TextInput does not receive active focus when clicked
+            // inside Noctalia's plugin-settings popup — the popup captures
+            // the press first, so keystrokes never reach the field. Mirror
+            // NTextInput's pattern: explicitly force focus and place the
+            // cursor on press; preventStealing stops the popup's scroll
+            // area from grabbing the gesture.
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                preventStealing: true
+                cursorShape: Qt.IBeamCursor
+
+                property int selectionStart: 0
+
+                onPressed: mouse => {
+                    input.forceActiveFocus()
+                    const pos = input.positionAt(mouse.x, mouse.y)
+                    input.cursorPosition = pos
+                    selectionStart = pos
+                }
+                onPositionChanged: mouse => {
+                    if (mouse.buttons & Qt.LeftButton) {
+                        input.select(selectionStart, input.positionAt(mouse.x, mouse.y))
+                    }
+                }
+                onDoubleClicked: input.selectAll()
+            }
         }
     }
 }
