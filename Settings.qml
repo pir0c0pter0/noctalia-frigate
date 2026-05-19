@@ -31,6 +31,17 @@ ColumnLayout {
         return Translation.tr(pluginApi, key, params)
     }
 
+    // Normalize a user-entered URL: default the scheme to https:// when
+    // none was given (an explicit http:// is kept), and drop trailing slashes.
+    function normalizeUrl(u) {
+        let v = (u || "").trim()
+        if (v === "") return ""
+        if (!/^https?:\/\//i.test(v)) {
+            v = "https://" + v
+        }
+        return v.replace(/\/+$/, "")
+    }
+
     function syncDefaultCamera() {
         if (editSelectedCameras.length === 0) {
             editDefaultCamera = ""
@@ -63,7 +74,8 @@ ColumnLayout {
     function saveSettings() {
         if (!pluginApi) return
         syncDefaultCamera()
-        pluginApi.pluginSettings.frigateUrl = editUrl.replace(/\/+$/, "")
+        editUrl = normalizeUrl(editUrl)
+        pluginApi.pluginSettings.frigateUrl = editUrl
         pluginApi.pluginSettings.selectedCameras = editSelectedCameras
         pluginApi.pluginSettings.defaultCamera = editDefaultCamera
         pluginApi.saveSettings()
@@ -124,17 +136,24 @@ ColumnLayout {
     }
 
     LabeledTextField {
+        id: urlField
         label: root.tr("frigateServerUrl")
         placeholder: root.tr("urlPlaceholder")
         text: root.editUrl
         onTextChanged: root.editUrl = text
+        // Auto-format: prepend https:// when no scheme was typed.
+        onEditingFinished: root.editUrl = root.normalizeUrl(root.editUrl)
+        tabTarget: usernameField.inputItem
     }
 
     LabeledTextField {
+        id: usernameField
         label: root.tr("usernameOptional")
         placeholder: root.tr("leaveBlankIfNoAuth")
         text: root.editUsername
         onTextChanged: root.editUsername = text
+        tabTarget: passwordField.inputItem
+        backtabTarget: urlField.inputItem
     }
 
     LabeledTextField {
@@ -144,6 +163,7 @@ ColumnLayout {
         echoMode: TextInput.Password
         text: root.editPassword
         onTextChanged: root.editPassword = text
+        backtabTarget: usernameField.inputItem
     }
 
     // SEC-3: reassure the user that credentials go to the system keyring.

@@ -17,6 +17,16 @@ ColumnLayout {
     property alias value: input.text
     property int echoMode: TextInput.Normal
 
+    // Focus-chain wiring: the parent sets these so Tab / Shift+Tab move
+    // between fields in order instead of leaving the form. inputItem
+    // exposes the inner TextInput so a parent can target it.
+    property Item tabTarget: null
+    property Item backtabTarget: null
+    property alias inputItem: input
+
+    // Forwarded from the inner TextInput: fires on Enter or focus loss.
+    signal editingFinished()
+
     Layout.fillWidth: true
     spacing: Style.marginS
 
@@ -44,6 +54,12 @@ ColumnLayout {
             selectedTextColor: Color.mOnPrimary
             clip: true
             echoMode: control.echoMode
+            // Join the Tab focus chain; KeyNavigation targets are wired by
+            // the parent (null => Tab falls through to the next item).
+            activeFocusOnTab: true
+            KeyNavigation.tab: control.tabTarget
+            KeyNavigation.backtab: control.backtabTarget
+            onEditingFinished: control.editingFinished()
 
             NText {
                 anchors.verticalCenter: parent.verticalCenter
