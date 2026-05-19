@@ -386,6 +386,8 @@ Item {
         syncStreamingState()
     }
 
+    Component.onCompleted: syncStreamingState()
+
     onVisibleChanged: syncStreamingState()
 
     readonly property real contentPreferredWidth: streamSize.width + (streamMargin * 2)
