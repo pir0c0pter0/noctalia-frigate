@@ -14,14 +14,17 @@ if not saved then
     saved = readObject(configDir .. "/noctalia/plugins/noctalia-frigate/settings.json") or {}
 end
 
+-- Only whitelisted keys are copied; legacy files may hold secrets.
+local serverUrl = type(saved.frigateUrl) == "string" and saved.frigateUrl or ""
+local defaultCamera = type(saved.defaultCamera) == "string" and saved.defaultCamera or ""
+-- Until the user picks cameras, every discovered camera is shown.
+local autoSelect = type(saved.selectedCameras) ~= "table"
 local selected = {}
 local seen = {}
-if type(saved.selectedCameras) == "table" then
-    for _, name in ipairs(saved.selectedCameras) do
-        if type(name) == "string" and name ~= "" and name ~= "birdseye" and not seen[name] then
-            table.insert(selected, name)
-            seen[name] = true
-        end
+for _, name in ipairs(autoSelect and {} or saved.selectedCameras) do
+    if type(name) == "string" and name ~= "" and name ~= "birdseye" and not seen[name] then
+        table.insert(selected, name)
+        seen[name] = true
     end
 end
 local cameras = {}
@@ -39,13 +42,18 @@ local nextFrameAt = 0
 local nextHealthAt = 0
 local failures = 0
 local connected = false
+local version = ""
+-- problem: connection/setup error shown as the panel state; message: preview error caption.
+local problem = ""
+local problemParams = {}
 local message = ""
-local messageParams = {}
 local username, password = "", ""
 local credentialsReady = false
 local credentialGeneration = 0
 local baseUrl = ""
 local urlError = ""
+local urlDraft = serverUrl
+local urlApplyAt = nil
 local runtimeDir = noctalia.getenv("XDG_RUNTIME_DIR")
 local frameDir = runtimeDir and (runtimeDir .. "/noctalia-frigate-" .. tostring(noctalia.nowMs()))
 if frameDir and not noctalia.mkdirAll(frameDir) then frameDir = nil end
@@ -55,18 +63,19 @@ local function currentCamera()
 end
 
 local function resetCamera()
-    local preferred = noctalia.getConfig("defaultCamera")
     index = 1
     for i, name in ipairs(selected) do
-        if name == preferred then index = i; break end
+        if name == defaultCamera then index = i; break end
     end
 end
 
 local function publish()
     state.set("viewer", {
-        camera = currentCamera(), cameras = cameras, selected = selected,
-        connected = connected, frame = frame, message = message,
-        credentialsReady = credentialsReady, messageParams = messageParams,
+        camera = currentCamera(), index = index, cameras = cameras, selected = selected,
+        connected = connected, version = version, frame = frame, message = message,
+        problem = problem, problemParams = problemParams, opened = opened,
+        url = serverUrl, defaultCamera = defaultCamera,
+        credentialsReady = credentialsReady, hasCredentials = username ~= "",
     })
 end
 
@@ -77,7 +86,9 @@ local function persist()
         return
     end
     local text = noctalia.json.encode({
-        selectedCameras = selected,
+        frigateUrl = serverUrl,
+        defaultCamera = defaultCamera,
+        selectedCameras = not autoSelect and selected or nil,
     })
     local temp = savedPath .. ".tmp"
     if not text or not noctalia.writeFile(temp, text) or not noctalia.renameFile(temp, savedPath) then
@@ -97,8 +108,7 @@ local function clearFrames()
 end
 
 local function configureUrl()
-    local value = noctalia.getConfig("frigateUrl")
-    value = noctalia.string.trim(value)
+    local value = noctalia.string.trim(serverUrl)
     urlError = ""
     if value == "" then baseUrl = ""; urlError = "noUrlConfigured"; return end
     if not value:find("://", 1, true) then value = "https://" .. value end
@@ -140,34 +150,22 @@ local function responseError(response)
     return nil
 end
 
-local function health(explicit)
-    nextHealthAt = noctalia.nowMs() + 30000
-    if baseUrl == "" then message = urlError; connected = false; publish(); return end
-    if not credentialsReady then publish(); return end
-    if explicit then message = "testing"; publish() end
-    request("/api/version", explicit and "test" or "health", function(response)
-        local err = responseError(response)
-        connected = err == nil
-        if explicit then
-            local value = noctalia.json.decode(response.body)
-            local version = type(value) == "table" and value.version or response.body
-            message = err or "connectedVersion"
-            messageParams = { status = response.status, version = tostring(version) }
-        end
-        publish()
-    end)
+local function fail(err, response)
+    connected = false
+    problem = err
+    problemParams = { status = response and response.status or 0 }
 end
 
+local requestFrame
+
 local function discover()
-    if baseUrl == "" then message = urlError; publish(); return end
     request("/api/config", "cameras", function(response)
         local err = responseError(response)
         local value = not err and noctalia.json.decode(response.body)
         if err then
-            message = err
-            messageParams = { status = response.status }
+            fail(err, response)
         elseif type(value) ~= "table" or type(value.cameras) ~= "table" then
-            message = "invalidResponse"
+            fail("invalidResponse", response)
         else
             local discovered = {}
             for name, camera in pairs(value.cameras) do
@@ -177,13 +175,39 @@ local function discover()
             end
             table.sort(discovered)
             cameras = discovered
-            message = ""
+            connected = true
+            problem = ""
+            if autoSelect and #discovered > 0 then
+                autoSelect = false
+                selected = { table.unpack(discovered) }
+                resetCamera()
+                persist()
+            end
+        end
+        publish()
+        requestFrame()
+    end)
+end
+
+local function health()
+    nextHealthAt = noctalia.nowMs() + 30000
+    request("/api/version", "health", function(response)
+        local err = responseError(response)
+        if err then
+            fail(err, response)
+            -- Reconnect quickly while the panel is open (closed update ticks are 30 s).
+            nextHealthAt = noctalia.nowMs() + 5000
+        else
+            local value = noctalia.json.decode(response.body)
+            version = noctalia.string.trim(tostring(type(value) == "table" and value.version or response.body or "")):sub(1, 32)
+            connected = true
+            problem = ""
+            if #cameras == 0 then discover() end
         end
         publish()
     end)
 end
 
-local requestFrame
 requestFrame = function()
     if not opened or not previewVisible or not credentialsReady or baseUrl == "" or currentCamera() == "" or frameInFlight then return end
     if not frameDir then message = "runtimeUnavailable"; publish(); return end
@@ -201,7 +225,8 @@ requestFrame = function()
             requestFrame()
             return
         end
-        local err = responseError(response)
+        local netErr = responseError(response)
+        local err = netErr
         -- Reject login pages and truncated JPEGs before handing data to the host decoder.
         local jpeg = response.body or ""
         if not err and (jpeg:sub(1, 3) ~= "\255\216\255" or jpeg:sub(-2) ~= "\255\217") then
@@ -217,6 +242,7 @@ requestFrame = function()
                 while #files > 2 do noctalia.removeFile(table.remove(files, 1)) end
                 failures = 0
                 connected = true
+                problem = ""
                 message = ""
                 nextFrameAt = noctalia.nowMs() + 1000
                 publish()
@@ -227,18 +253,27 @@ requestFrame = function()
         end
         failures = math.min(failures + 1, 5)
         nextFrameAt = noctalia.nowMs() + math.min(30000, 2000 * 2 ^ (failures - 1))
-        if responseError(response) then connected = false end
-        message = err
-        messageParams = { status = response.status }
+        if netErr == "authFailed" or netErr == "cannotReachServer" then
+            fail(netErr, response)
+        else
+            -- A single camera failing (offline, 404, bad image) is not a server problem.
+            message = err == "snapshotWriteFailed" and err or "streamError"
+        end
         publish()
     end)
     if not accepted then
         frameInFlight = false
         failures = math.min(failures + 1, 5)
         nextFrameAt = noctalia.nowMs() + math.min(30000, 2000 * 2 ^ (failures - 1))
-        message = "cannotReachServer"
+        fail("cannotReachServer")
         publish()
     end
+end
+
+-- Health success discovers cameras when none are known yet.
+local function connect()
+    health()
+    requestFrame()
 end
 
 local function loadCredentials()
@@ -246,12 +281,11 @@ local function loadCredentials()
     local generation = credentialGeneration
     credentialsReady = false
     username, password = "", ""
-    message = urlError
+    problem = urlError
     publish()
     if not noctalia.commandExists("secret-tool") then
         credentialsReady = true
-        health(false)
-        requestFrame()
+        connect()
         return
     end
     local remaining = 2
@@ -268,9 +302,8 @@ local function loadCredentials()
             remaining = remaining - 1
             if remaining == 0 then
                 credentialsReady = not failed
-                if failed then message = "keyringFailed"; publish(); return end
-                health(false)
-                requestFrame()
+                if failed then problem = "keyringFailed"; publish(); return end
+                connect()
             end
         end
         if not noctalia.runAsync({ "secret-tool", "lookup", "service", "noctalia-frigate", "key", key }, done, 5000) then
@@ -279,25 +312,29 @@ local function loadCredentials()
     end
 end
 
-function update()
-    if credentialsReady and noctalia.nowMs() >= nextHealthAt then health(false) end
-    if opened and previewVisible and noctalia.nowMs() >= nextFrameAt then requestFrame() end
-end
-
-function onConfigChanged()
+local function applyUrl()
+    urlApplyAt = nil
+    if urlDraft == serverUrl then return end
+    serverUrl = urlDraft
+    persist()
     epoch = epoch + 1
     pending = {}
     connected = false
+    version = ""
     clearFrames()
     local oldUrl = baseUrl
     configureUrl()
     if oldUrl ~= baseUrl then cameras = {} end
-    resetCamera()
-    message = urlError
-    nextHealthAt = 0
+    problem = urlError
     publish()
-    health(false)
-    requestFrame()
+    connect()
+end
+
+function update()
+    local now = noctalia.nowMs()
+    if urlApplyAt and now >= urlApplyAt then applyUrl() end
+    if credentialsReady and now >= nextHealthAt then health() end
+    if opened and previewVisible and now >= nextFrameAt then requestFrame() end
 end
 
 state.watch("command", function(command)
@@ -309,21 +346,19 @@ state.watch("command", function(command)
         previewVisible = true
         clearFrames()
         resetCamera()
-        message = urlError
+        message = ""
         noctalia.setUpdateInterval(1000)
         publish()
-        health(false)
-        requestFrame()
-        if #cameras == 0 then discover() end
+        connect()
     elseif action == "close" then
         opened = false
+        if urlApplyAt then applyUrl() end
         clearFrames()
         noctalia.setUpdateInterval(30000)
         publish()
     elseif action == "preview" then
         previewVisible = command.value == true
         clearFrames()
-        noctalia.setUpdateInterval(opened and previewVisible and 1000 or 30000)
         publish()
         requestFrame()
     elseif action == "next" or action == "previous" then
@@ -346,17 +381,26 @@ state.watch("command", function(command)
         end
         if not included then table.insert(nextSelected, name) end
         selected = nextSelected
+        autoSelect = false
         resetCamera()
         clearFrames()
         message = ""
         persist()
         publish()
         requestFrame()
-    elseif action == "test" then
-        health(true)
+    elseif action == "default" then
+        if type(command.value) ~= "string" then return end
+        defaultCamera = command.value
+        persist()
+        publish()
+    elseif action == "url" then
+        if type(command.value) ~= "string" then return end
+        -- Debounced so typing does not fire a request per keystroke.
+        urlDraft = command.value
+        urlApplyAt = noctalia.nowMs() + 800
     elseif action == "discover" then
         discover()
-    elseif action == "reloadCredentials" then
+    elseif action == "retry" or action == "reloadCredentials" then
         epoch = epoch + 1
         pending = {}
         clearFrames()
@@ -378,7 +422,7 @@ end
 
 configureUrl()
 resetCamera()
-message = urlError
+problem = urlError
 if not savedFileExists then persist() end
 publish()
 noctalia.setUpdateInterval(30000)

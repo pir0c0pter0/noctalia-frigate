@@ -66,27 +66,36 @@ credentials remain available for reinstalling.
 
 ## Configure and use
 
-1. Right-click the bar icon to open the native plugin settings editor.
-2. Set **Frigate Server URL**, for example `http://frigate.example.com:5000`.
+All configuration lives on the panel's **Settings** page (gear button, or
+right-click the bar icon). Noctalia's native settings editor cannot list a
+server's cameras, so the plugin has no native settings.
+
+1. Under **Server**, enter the URL, for example `http://frigate.example.com:5000`.
    An omitted scheme uses HTTPS. Put credentials in the keyring, not the URL.
-3. Open the viewer and click **List Cameras**, then **Camera Selection**.
-4. Toggle the cameras to display. The selection saves automatically.
-5. Set **Default Camera** in native plugin settings to one selected camera's
-   exact name. If unset or unavailable, the first selected camera opens.
+   The plugin connects automatically shortly after you stop typing.
+2. Once connected, cameras are discovered automatically and all are shown
+   until you toggle them under **Cameras in the viewer**.
+3. Pick the **Main camera** from the list; it opens first every time.
+
+The plugin reconnects on its own (every 5 seconds while the panel is open).
+Errors replace the preview with a short explanation and the action that fixes
+it: open settings, edit credentials or try again.
 
 Click the icon to toggle the viewer. Use the arrow buttons or **Left / Right**
 keys to cycle, including wraparound. Native controls support keyboard focus;
 theme, scale, hover feedback, tooltips, placement and outside-click dismissal
 are supplied by Noctalia. The close button follows the shell's setting.
 
-`settings.example.toml` shows plugin settings and a named bar widget definition;
+`settings.example.toml` shows a named bar widget definition;
 merge these into your configuration rather than replacing your existing file.
 
 ### Credentials
 
-Click **Edit credentials** in the panel. A terminal prompts for username and
+Click **Credentials** on the Settings page. A terminal prompts for username and
 password; the password is hidden. Empty username removes Basic Auth.
-Then click **Reload credentials**, which also retries keyring access after unlock.
+Saving automatically reloads credentials in the running plugin, including after
+removing authentication. **Try again** reloads them after unlocking the keyring,
+or if the terminal cannot reach Noctalia's IPC.
 
 The Noctalia plugin API does not expose its internal secret store or a way to
 feed subprocess stdin. This small terminal helper therefore sends the secrets
@@ -104,15 +113,15 @@ Use HTTPS when credentials cross an untrusted network.
 The plugin ID is now `pir0c0pter0/frigate`; add its new bar entry after enabling.
 On first load, if the new viewer state does not exist, the service reads
 `$XDG_CONFIG_HOME/noctalia/plugins/noctalia-frigate/settings.json`
-(defaulting to `~/.config/...`). It imports the selected cameras without
-modifying the old file. Set the server URL and default camera in Noctalia's native settings; these settings remain the
-single source of truth, so clearing a URL actually disables server access.
+(defaulting to `~/.config/...`). It imports the URL, main camera and selected
+cameras without modifying the old file; the old file is never read again.
 Legacy plaintext credentials are never imported; existing
 `service=noctalia-frigate` keyring entries are reused.
 
-If your v4 settings live elsewhere, copy the non-secret URL/default into native
-settings and select cameras in the viewer. New selection state lives in
-`noctalia.pluginDataDir()/viewer.json`, honoring `NOCTALIA_STATE_HOME`.
+If your v4 settings live elsewhere, enter the URL on the Settings page. All
+configuration lives in `noctalia.pluginDataDir()/viewer.json`, honoring
+`NOCTALIA_STATE_HOME`. Early Noctalia 5 builds kept the URL in
+`[plugin_settings."pir0c0pter0/frigate"]`; re-enter it once and delete that table.
 
 ## Performance and GPU
 
@@ -120,7 +129,7 @@ settings and select cameras in the viewer. New selection state lives in
 - Native asynchronous HTTP handles JSON and binary JPEGs. There is **no curl,
   shell pipeline or base64 encoding per frame**.
 - Preview requests run about once per second, one at a time. They stop when the
-  panel closes or the camera picker is shown; health checks run every 30 seconds.
+  panel closes or the Settings page is shown; health checks run every 30 seconds.
   Late callbacks after camera, configuration or panel changes cannot replace the current image.
 - Failures back off from 2 seconds to a 30-second maximum. A successful frame
   resets the delay. The last valid image remains visible during transient errors.

@@ -4,24 +4,10 @@ version = "2.0.0"
 plugin_api = 26
 author = "pir0c0pter0"
 license = "MIT"
-icon = "camera-video"
+icon = "device-cctv"
 description = "Live Frigate camera snapshots in a native Noctalia panel."
 tags = ["camera", "security"]
 dependencies = ["bash", "secret-tool"]
-
-[[setting]]
-key = "frigateUrl"
-type = "string"
-label_key = "frigateServerUrl"
-description_key = "serverUrlHint"
-default = ""
-
-[[setting]]
-key = "defaultCamera"
-type = "string"
-label_key = "defaultCamera"
-description_key = "defaultCameraHint"
-default = ""
 
 [[service]]
 id = "service"
@@ -33,7 +19,6 @@ entry = "BarWidget.luau"
 
 [widget.actions]
 left = "panel-toggle pir0c0pter0/frigate:viewer"
-right = "settings-open-plugin pir0c0pter0/frigate"
 
 [[panel]]
 id = "viewer"

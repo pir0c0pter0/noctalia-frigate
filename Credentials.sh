@@ -11,12 +11,14 @@ if [[ ${LANG:-} == pt* ]]; then
     title='Frigate: credenciais no keyring do sistema'
     user_prompt='Usuário (vazio remove autenticação): '
     pass_prompt='Senha: '
-    done_text='Salvo. Clique em Recarregar credenciais no painel.'
+    done_text='Salvo. Clique em Tentar de novo no painel.'
+    reloaded_text='Salvo. Credenciais recarregadas no painel.'
 else
     title='Frigate: credentials in the system keyring'
     user_prompt='Username (empty removes authentication): '
     pass_prompt='Password: '
-    done_text='Saved. Click Reload credentials in the panel.'
+    done_text='Saved. Click Try again in the panel.'
+    reloaded_text='Saved. Credentials reloaded in the panel.'
 fi
 printf '%s\n' "$title"
 read -r -p "$user_prompt" frigate_user
@@ -30,6 +32,9 @@ if [[ -n $frigate_user ]]; then
 else
     secret-tool clear service noctalia-frigate key username || [[ $? == 1 ]]
     secret-tool clear service noctalia-frigate key password || [[ $? == 1 ]]
+fi
+if noctalia msg plugin pir0c0pter0/frigate:service all refresh >/dev/null 2>&1; then
+    done_text=$reloaded_text
 fi
 printf '%s\n' "$done_text"
 read -r -p 'Enter: ' _
