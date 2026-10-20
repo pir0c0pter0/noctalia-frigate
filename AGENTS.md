@@ -1,28 +1,44 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
-This repository is a pure QML Noctalia plugin; everything lives at the root.
+## Structure
 
-- Root plugin files: `Main.qml`, `BarWidget.qml`, `Panel.qml`, `Settings.qml`, and `manifest.json`
-- Shared helpers: `Translation.js` (i18n helper) and `LabeledTextField.qml` (reusable settings input)
-- Translations: `i18n/en.json` and `i18n/pt-BR.json`
-- Example local config: `settings.example.json`
+This is a Noctalia 5 native Luau plugin. Root entries: `Main.luau` (singleton
+service), `BarWidget.luau`, `Panel.luau`, `Credentials.sh`, and `plugin.toml`.
+Translations live in `translations/en.json` and `translations/pt-BR.json`.
+`settings.example.toml` contains non-secret example configuration. `.planning/`
+includes historical v4 research and the Noctalia 5 migration record.
 
-## Build, Test, and Development Commands
-There is no build step; changes are loaded by the host shell.
+## Development and checks
 
-- `ln -sf "$(pwd)" ~/.config/noctalia/plugins/noctalia-frigate`: symlink the plugin for local Noctalia development
-- `NOCTALIA_DEBUG=1 qs -c noctalia-shell --no-duplicate`: run Noctalia in debug mode with hot reload
-- `qmllint *.qml`: lint the root QML files
+There is no build step. Symlink the repository to
+`${NOCTALIA_DATA_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}}/noctalia/plugins/frigate`,
+reload config,
+and enable `pir0c0pter0/frigate`. Luau edits hot-reload in the host. Run IPC commands
+with the running Wayland session's `XDG_RUNTIME_DIR` and `WAYLAND_DISPLAY`.
 
-## Coding Style & Naming Conventions
-Use 4-space indentation in QML and keep component files in `PascalCase.qml`. Use `camelCase` for QML properties, functions, and JavaScript helpers, and `lowerCamelCase` keys in translation JSON. Prefer descriptive state names such as `connectionStatus` and `selectedCameras`. Follow the existing theme-safe approach: use the Noctalia shell theme tokens instead of hardcoded colors.
+- `noctalia plugins lint .`: native manifest/settings checks
+- `lua tests/service.lua`: service behavior with stubbed host I/O
+- `lua tests/ui.lua`: panel/bar lifecycle and native controls
+- `bash tests/credentials.sh`: credential helper with a fake secret-tool
+- `bash -n Credentials.sh`: shell syntax
+- `luau-compile --null *.luau`: optional official Luau syntax check
 
-## Testing Guidelines
-There is no automated unit-test suite in this repository. Before opening a PR, manually verify the relevant flows in Noctalia against a real Frigate instance: connection handling, camera selection, navigation wraparound, persistence, and i18n.
+Manually verify against a real Frigate instance: auth/connection handling,
+landscape/portrait previews, camera selection, wraparound, reopen/default,
+persistence, i18n, keyboard use and shell scaling. Stubbed checks cannot verify
+GPU rendering or compositor behavior.
 
-## Commit & Pull Request Guidelines
-Recent history follows Conventional Commit style with scopes, for example `feat(settings): ...`, `fix(panel): ...`, and `chore(root): ...`. Keep that pattern. PRs should include a short problem statement, the user-visible impact, validation steps you ran, and screenshots or screen recordings for UI changes. Link the related issue when one exists.
+## Style
 
-## Security & Configuration Tips
-Do not commit real Frigate URLs, usernames, passwords, or local environment details. Start from `settings.example.json` for shared examples, and redact credentials from logs and screenshots.
+Use 4-space indentation, PascalCase entry filenames, camelCase variables and
+translation keys. Prefer Noctalia's native APIs, controls and theme roles.
+Declare every `getConfig` key in `plugin.toml`. Keep preview work single-flight,
+ignore stale responses, bound temporary files and stop preview requests on close.
+
+## Changes and security
+
+Use Conventional Commits with scopes. PRs explain the problem, user impact and
+validation; include screenshots or recordings for UI changes and link issues.
+Never commit real Frigate endpoints, credentials or local environment details.
+Credentials belong in Secret Service, never settings, argv, environment, shared
+state or logs. Use the native HTTP client; do not introduce per-frame processes.

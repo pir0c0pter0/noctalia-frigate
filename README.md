@@ -1,209 +1,166 @@
-<div align="center">
+# Frigate Viewer for Noctalia 5
 
-# Frigate Viewer
+Live Frigate camera snapshots in a native Noctalia panel, with camera selection,
+keyboard navigation, connection status and English / Brazilian Portuguese UI.
 
-**Live camera snapshot preview from [Frigate NVR](https://frigate.video) directly in your [Noctalia Shell](https://github.com/noctalia-dev/noctalia-shell) desktop bar.**
+This is the **v2 port for Noctalia 5**, developed against **Noctalia 5.3.0**.
+It uses Luau and `plugin.toml`; QML/Quickshell is no longer required. The v1
+implementation remains in Git history for Noctalia 4 users.
 
-[![Noctalia](https://img.shields.io/badge/Noctalia-4.4%2B-blue?style=flat-square)](https://github.com/noctalia-dev/noctalia-shell)
-[![Frigate](https://img.shields.io/badge/Frigate-0.9%2B-green?style=flat-square)](https://frigate.video)
-[![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
-[![QML](https://img.shields.io/badge/Pure-QML-orange?style=flat-square)](#)
+## Install
 
-One click to see your cameras. Arrows to navigate. No browser needed.
-
-</div>
-
----
-
-## Overview
-
-Frigate Viewer is a Noctalia Shell plugin that puts your security cameras one click away. It polls live JPEG snapshots from your Frigate NVR instance (refreshed about once per second) in a compact floating panel, with quick navigation between cameras and real-time connection status in the bar.
-
-### Key Features
-
-- **Live Snapshot Preview** — Polls the latest JPEG snapshot from Frigate cameras (~1 fps) into native QML Image buffers
-- **Bar Widget with Status** — Camera icon with green/red connection status dot and dynamic tooltip
-- **Camera Navigation** — Left/right buttons to cycle through selected cameras
-- **Settings UI** — Configure Frigate URL, optional Basic Auth credentials, test connection, and discover cameras
-- **Camera Selection** — Choose which cameras appear in the viewer via checkboxes
-- **Default Startup Camera** — Pick which selected camera opens first when clicking the widget icon
-- **Persistence** — All settings and camera selections survive restarts
-- **Secure Credentials** — Username and password are kept in the system keyring (Secret Service), never written to disk in plain text
-- **i18n** — Automatic English and pt-BR translations for Noctalia
-- **Theme Compliance** — Zero hardcoded colors; all styling via Noctalia theme tokens
-
-## Requirements
-
-| Dependency | Version | Notes |
-|------------|---------|-------|
-| [Noctalia Shell](https://github.com/noctalia-dev/noctalia-shell) | 4.4.0+ | Plugin host environment |
-| [Frigate NVR](https://frigate.video) | 0.9+ | Camera server |
-| Linux + niri | — | Wayland compositor |
-| libsecret (`secret-tool`) | — | Stores credentials in the system keyring |
-| curl | — | Fetches authenticated snapshots (Basic Auth setups only) |
-
-A keyring daemon (GNOME Keyring, KWallet, …) must be running for credential storage. No build step required — pure QML plugin.
-
-## Installation
-
-### Quick Install
+From this repository's root:
 
 ```bash
-# Clone the repository
-git clone https://github.com/pir0c0pter0/noctalia-frigate.git
-
-# Symlink to Noctalia plugins directory
-ln -sf "$(pwd)/noctalia-frigate" ~/.config/noctalia/plugins/noctalia-frigate
+frigate_plugin_dir="${NOCTALIA_DATA_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}}/noctalia/plugins"
+mkdir -p "$frigate_plugin_dir"
+ln -s "$(pwd)" "$frigate_plugin_dir/frigate"
+noctalia msg config-reload
+noctalia msg plugins enable pir0c0pter0/frigate
 ```
 
-### Manual Install
+If the destination already exists, inspect it before replacing it. Noctalia 5
+loads local plugins from the **data directory**, not the v4 configuration directory.
+
+Add **Frigate Viewer** through the bar's widget settings. Its widget type is
+`pir0c0pter0/frigate:bar`. To open the panel directly:
 
 ```bash
-# Copy files directly
-cp -r noctalia-frigate ~/.config/noctalia/plugins/noctalia-frigate
+noctalia msg panel-toggle pir0c0pter0/frigate:viewer
 ```
 
-### Enable the Plugin
+Requires a running Noctalia session and Frigate's HTTP API. For Basic Auth,
+install `secret-tool` (libsecret), run a Secret Service keyring such as GNOME
+Keyring or KWallet, and have Bash and a terminal available.
 
-1. Open Noctalia **Settings > Plugins**
-2. Enable **Frigate Viewer**
-3. Go to **Settings > Bar**
-4. Add **Frigate Viewer** widget to your bar
-
-## Configuration
-
-### Connection Setup
-
-1. Open Noctalia **Settings > Plugins > Frigate Viewer**
-2. Enter your Frigate server URL (e.g., `http://192.168.1.100:5000`)
-3. *(Optional)* Enter username and password for Basic Auth
-4. Click **Save**, then **Test Connection**
-5. Click **List Cameras** to discover available cameras
-6. Check the cameras you want in the viewer
-7. Choose the **Default Camera** that should open first
-8. Click **Save** again
-
-> **Tip:** Enter a URL without a scheme and `https://` is prepended automatically when you leave the field — type `http://` explicitly for a local, non-TLS server. Use **Tab** to move between the URL, username, and password fields.
-
-### Supported Connection Scenarios
-
-| Scenario | URL Example | Auth |
-|----------|-------------|------|
-| Local, no auth | `http://192.168.1.100:5000` | None |
-| Local, Basic Auth (reverse proxy) | `http://192.168.1.100:8080` | Username + Password |
-| Remote, HTTPS no auth | `https://frigate.example.com` | None |
-| Remote, HTTPS + Basic Auth | `https://frigate.example.com` | Username + Password |
-
-> **Note:** Frigate's native JWT authentication (port 8971) is **not supported**. Use port 5000 (unauthenticated) or a reverse proxy with Basic Auth (nginx, Traefik, Caddy).
-
-> **Security:** Basic Auth over plain `http://` transmits your username and password in cleartext on every request. For any non-trusted network, use HTTPS — it is strongly recommended whenever Basic Auth is enabled.
-
-> **Credential storage:** Your username and password are stored in the system keyring via the Secret Service API (`secret-tool`) — never written to `settings.json`. A keyring daemon (GNOME Keyring, KWallet, …) must be running.
-
-## Usage
-
-### Bar Widget
-
-- **Camera icon** appears in your Noctalia bar
-- **Status dot**: green = connected, red = disconnected
-- **Hover** for tooltip showing connection status
-- **Click** to open/close the viewer panel
-
-### Viewer Panel
-
-- **Live snapshot preview** from the currently selected camera, refreshed ~1 fps
-- **Camera name** displayed in the header
-- **Left/Right arrows** to navigate between cameras (visible when 2+ cameras selected)
-- **Default camera reset on open** so each click starts on your preferred camera
-- **Auto-reconnect** when reopening the panel
-- **Resource-friendly**: snapshot polling stops when panel is closed
-
-## Architecture
-
-```
-noctalia-frigate/
-├── manifest.json        # Plugin identity + default settings
-├── Main.qml             # State hub: connection, cameras, snapshot URL, navigation
-├── BarWidget.qml        # Bar icon + status dot + tooltip + panel toggle
-├── Panel.qml            # Snapshot preview + navigation + error states
-├── Settings.qml         # Connection config + camera selection + default camera
-├── Translation.js       # Shared i18n helper
-├── LabeledTextField.qml # Reusable labeled settings input
-├── i18n/
-│   ├── en.json          # English translations
-│   └── pt-BR.json       # Portuguese (pt-BR) translations
-└── .planning/           # Development planning docs
-```
-
-### Data Flow
-
-```
-Main.qml (state hub)
-  ├── BarWidget.qml reads: connectionStatus
-  ├── Panel.qml reads: snapshotBaseUrl, currentCameraName, selectedCameras
-  ├── Settings.qml writes: frigateUrl, selectedCameras, defaultCamera
-  ├── OS keyring (secret-tool): username + password — loaded at startup, saved on change
-  └── Frigate API: /api/version, /api/config, /api/<camera>/latest.jpg
-```
-
-### Frigate API Endpoints Used
-
-| Endpoint | Purpose |
-|----------|---------|
-| `GET /api/version` | Connection test + health polling (30s interval) |
-| `GET /api/config` | Discover camera names |
-| `GET /api/<camera>/latest.jpg` | Camera snapshot (polled ~1 fps) |
-
-Without authentication the `Image` element loads the snapshot URL directly. With Basic Auth, snapshots are fetched through `curl` (piped via `base64` into a `data:` URI) because QML's `XMLHttpRequest` cannot reliably return binary data and `Image` cannot send auth headers.
-
-## Development
-
-### Hot Reload
+### Verify the installation
 
 ```bash
-# Symlink for development
-ln -sf ~/path/to/noctalia-frigate ~/.config/noctalia/plugins/noctalia-frigate
-
-# Start Noctalia with debug mode
-NOCTALIA_DEBUG=1 qs -c noctalia-shell --no-duplicate
+noctalia msg plugins list | rg 'pir0c0pter0/frigate'
+noctalia msg panel-open pir0c0pter0/frigate:viewer
+noctalia msg panel-close pir0c0pter0/frigate:viewer
 ```
 
-Changes to QML files are picked up on save.
+The plugin should be listed as `enabled`. Enabling may export the plugin in the
+background; allow it to finish before opening the panel. If IPC reports that
+Noctalia is not running, run the commands in a terminal inside the same Wayland
+session. Both `XDG_RUNTIME_DIR` and `WAYLAND_DISPLAY` must match that session.
 
-## Limitations
+To define the widget manually, merge this with your existing widget definitions
+and add `"frigate"` to the appropriate bar's `start`, `center` or `end` list:
 
-- **Single Frigate server** — v1 supports one Frigate instance
-- **No JWT auth** — the plugin does not implement Frigate's native JWT login flow (port 8971); use port 5000 or a reverse proxy with Basic Auth
-- **No audio** — the preview shows still JPEG snapshots only
-- **No recording playback** — Use Frigate's web UI for event history
-- **No PTZ controls** — Use Frigate's web UI for camera controls
+```toml
+[widget.frigate]
+type = "pir0c0pter0/frigate:bar"
+```
 
-## Roadmap
+### Update or remove
 
-- [ ] Birdseye composite snapshot view
-- [ ] Configurable FPS per camera
-- [ ] Detection event alert indicator on bar icon
-- [ ] Camera count badge
-- [ ] Multi-server support
+A development symlink tracks this checkout, including its current Git branch.
+Pull updates in the checkout, then run `noctalia msg config-reload` when the
+manifest changes. Keep the checkout in place while the plugin is installed.
 
-## Contributing
+To remove it, disable `pir0c0pter0/frigate` in Settings → Plugins, remove its bar
+widget, and delete the `plugins/frigate` symlink. Camera selection and keyring
+credentials remain available for reinstalling.
 
-Contributions are welcome! This is a pure QML project — no build tools needed.
+## Configure and use
 
-1. Fork the repository
-2. Create your feature branch
-3. Make your changes
-4. Test with `NOCTALIA_DEBUG=1 qs -c noctalia-shell --no-duplicate`
-5. Submit a pull request
+1. Right-click the bar icon to open the native plugin settings editor.
+2. Set **Frigate Server URL**, for example `http://frigate.example.com:5000`.
+   An omitted scheme uses HTTPS. Put credentials in the keyring, not the URL.
+3. Open the viewer and click **List Cameras**, then **Camera Selection**.
+4. Toggle the cameras to display. The selection saves automatically.
+5. Set **Default Camera** in native plugin settings to one selected camera's
+   exact name. If unset or unavailable, the first selected camera opens.
 
-## License
+Click the icon to toggle the viewer. Use the arrow buttons or **Left / Right**
+keys to cycle, including wraparound. Native controls support keyboard focus;
+theme, scale, hover feedback, tooltips, placement and outside-click dismissal
+are supplied by Noctalia. The close button follows the shell's setting.
 
-[MIT](LICENSE) &copy; [pir0c0pter0](https://github.com/pir0c0pter0) (pir0c0pter0000@gmail.com)
+`settings.example.toml` shows plugin settings and a named bar widget definition;
+merge these into your configuration rather than replacing your existing file.
 
----
+### Credentials
 
-<div align="center">
+Click **Edit credentials** in the panel. A terminal prompts for username and
+password; the password is hidden. Empty username removes Basic Auth.
+Then click **Reload credentials**, which also retries keyring access after unlock.
 
-Built for [Noctalia Shell](https://github.com/noctalia-dev/noctalia-shell) | Powered by [Frigate NVR](https://frigate.video)
+The Noctalia plugin API does not expose its internal secret store or a way to
+feed subprocess stdin. This small terminal helper therefore sends the secrets
+directly to `secret-tool` on stdin, keeping them out of process arguments,
+environment variables, TOML, JSON, shared state and logs. HTTP requests use
+Noctalia's in-process Basic Auth support. HTTPS certificate verification stays
+enabled, and redirects are not followed.
 
-</div>
+Frigate's native JWT login on port 8971 is not implemented. Use its trusted
+unauthenticated endpoint on port 5000 or a reverse proxy with Basic Auth.
+Use HTTPS when credentials cross an untrusted network.
+
+### Migrating from v1 / Noctalia 4
+
+The plugin ID is now `pir0c0pter0/frigate`; add its new bar entry after enabling.
+On first load, if the new viewer state does not exist, the service reads
+`$XDG_CONFIG_HOME/noctalia/plugins/noctalia-frigate/settings.json`
+(defaulting to `~/.config/...`). It imports the selected cameras without
+modifying the old file. Set the server URL and default camera in Noctalia's native settings; these settings remain the
+single source of truth, so clearing a URL actually disables server access.
+Legacy plaintext credentials are never imported; existing
+`service=noctalia-frigate` keyring entries are reused.
+
+If your v4 settings live elsewhere, copy the non-secret URL/default into native
+settings and select cameras in the viewer. New selection state lives in
+`noctalia.pluginDataDir()/viewer.json`, honoring `NOCTALIA_STATE_HOME`.
+
+## Performance and GPU
+
+- A singleton service shares connection/camera state across bar instances.
+- Native asynchronous HTTP handles JSON and binary JPEGs. There is **no curl,
+  shell pipeline or base64 encoding per frame**.
+- Preview requests run about once per second, one at a time. They stop when the
+  panel closes or the camera picker is shown; health checks run every 30 seconds.
+  Late callbacks after camera, configuration or panel changes cannot replace the current image.
+- Failures back off from 2 seconds to a 30-second maximum. A successful frame
+  resets the delay. The last valid image remains visible during transient errors.
+- Frigate returns images bounded to 640 pixels high at JPEG quality 75. This
+  reduces transfer, decode and texture-upload work while covering a 2× preview.
+- Only the current and previous temporary JPEG are retained under a private
+  `$XDG_RUNTIME_DIR` session directory. Unique filenames refresh the host image
+  control correctly. Files are removed on close/unload; a crash may leave up to
+  two files in that session directory until the runtime directory is cleared.
+- Native `ui.image` preserves aspect ratio and uses Noctalia's GPU rendering
+  pipeline. **JPEG decoding is not hardware video decoding.** There is no video
+  player, VA-API/RTSP/WebRTC pipeline, audio or recording playback in this plugin.
+
+## Development and checks
+
+No build step or runtime dependencies on Qt/QML. Noctalia hot-reloads `.luau`
+changes; reload configuration after editing the manifest.
+
+```bash
+noctalia plugins lint .
+lua tests/service.lua
+lua tests/ui.lua
+bash tests/credentials.sh
+bash -n Credentials.sh
+# Optional: official Luau compiler, when installed
+luau-compile --null Main.luau BarWidget.luau Panel.luau
+```
+
+The tests stub host I/O and exercise the real entry scripts; they do not replace
+verification in a graphical Noctalia session against a real Frigate instance.
+Check connection/auth failures, portrait/landscape previews, camera selection,
+wraparound, reopen/default behavior, persistence, both languages and shell scaling.
+
+Files: `Main.luau` (service), `BarWidget.luau`, `Panel.luau`, `Credentials.sh`,
+`plugin.toml`, `translations/`, and `tests/`. Historical v4 research is kept in
+`.planning/`; the migration record is `.planning/NOCTALIA-5.md`.
+
+References: [Noctalia plugin API](https://docs.noctalia.dev/noctalia/plugins/development/runtime-api/),
+[native UI](https://docs.noctalia.dev/noctalia/plugins/development/declarative-ui/),
+[local development](https://docs.noctalia.dev/noctalia/plugins/development/workflow/),
+[Frigate latest-frame API](https://docs.frigate.video/integrations/api/latest-frame-camera-name-latest-extension-get/).
+
+[MIT](LICENSE) · pir0c0pter0
