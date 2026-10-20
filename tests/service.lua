@@ -121,8 +121,19 @@ test("snapshot uses native HTTP, encoded camera and bounded resolution", functio
     h:command("open")
     local req = h.requests[h:find("latest.jpg")].request
     assert(req.url:find("front%20%2F%201/latest.jpg", 1, true))
-    assert(req.url:find("height=", 1, true) and req.url:find("quality=75", 1, true))
+    assert(req.url:find("height=640", 1, true) and req.url:find("quality=90", 1, true))
     assert(req.follow_redirects == false)
+end)
+
+test("preview asks for the camera's detect height, capped at 720", function()
+    local h = selectedBoot()
+    h:command("discover")
+    h:reply(h:find("/api/config"), { cameras = { front = { detect = { height = 288 } }, side = { detect = { height = 2160 } } } })
+    h:command("open")
+    assert(h.requests[h:find("latest.jpg")].request.url:find("height=288&", 1, true))
+    h:command("next")
+    h:reply(h:find("latest.jpg"), "\255\216\255jpeg\255\217")
+    assert(h.requests[h:find("latest.jpg")].request.url:find("height=720&", 1, true))
 end)
 
 test("one snapshot in flight; closing ignores late results and cleans images", function()
@@ -400,6 +411,29 @@ test("retry reloads keyring credentials after a failed lookup", function()
     h.commands[4].callback({ exitCode = 1, stdout = "" })
     h:reply(h:find("/api/version"), "0.16.0")
     assert(h.state.viewer.problem == "" and h.state.viewer.credentialsReady)
+end)
+
+test("snapshot saves a full-resolution recording frame into the localized pictures dir", function()
+    local h = selectedBoot({ files = {
+        ["/data/viewer.json"] = { frigateUrl = "https://frigate.example.com", selectedCameras = { "front door" } },
+        ["/config/user-dirs.dirs"] = '# comment\nXDG_PICTURES_DIR="$HOME/Imagens"\n',
+    } })
+    h.api.expandPath = function(path) return (path:gsub("^~", "/home/u")) end
+    h:command("open")
+    h:command("snapshot")
+    local i = h:find("/snapshot.jpg")
+    assert(h.requests[i].request.url:find("/api/front%%20door/recordings/%d+/snapshot%.jpg$") and h.state.viewer.savingSnapshot)
+    -- No recording yet: fall back to the live detect frame; a bad body there is reported.
+    h:reply(i, '{"detail":"Not Found"}', 404)
+    h:reply(h:find("/latest.jpg?quality=95"), "<html>login</html>")
+    assert(h.notification == "snapshotSaveFailed" and h.state.viewer.savedSnapshot == "")
+    h:command("snapshot")
+    h:reply(h:find("/snapshot.jpg"), "\255\216\255full\255\217")
+    local saved = h.state.viewer.savedSnapshot
+    assert(saved:match("^/home/u/Imagens/cameras/front_door%-%d+%-%d+%-%d+_%d+%-%d+%-%d+%.jpg$"), saved)
+    assert(h.files[saved] == "\255\216\255full\255\217" and not h.state.viewer.savingSnapshot)
+    h:command("next")
+    assert(h.state.viewer.savedSnapshot == "")
 end)
 
 print(count .. " service checks passed")

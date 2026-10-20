@@ -99,6 +99,12 @@ h.view.frame = "/run/private/camera.jpg"
 h.watchers.viewer(h.view)
 local preview = h:find(function(n) return n.type == "image" end)
 assert(preview.props.path == h.view.frame and preview.props.fit == "contain")
+h:find(function(n) return n.props.glyph == "camera" end).props.onClick()
+assert(h.commands[#h.commands].action == "snapshot")
+h.view.savedSnapshot = "/home/u/Imagens/cameras/front.jpg"
+h.watchers.viewer(h.view)
+assert(h:find(function(n) return n.props.glyph == "check" end).props.tooltip == "snapshotSaved")
+h.view.savedSnapshot = ""
 h.env.editCredentials()
 assert(h.terminal == "bash '/tmp/plugin'\\''s directory/Credentials.sh'")
 h.env.onClose()

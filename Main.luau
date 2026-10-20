@@ -28,6 +28,7 @@ for _, name in ipairs(autoSelect and {} or saved.selectedCameras) do
     end
 end
 local cameras = {}
+local detectHeights = {}
 local index = 1
 local opened = false
 local previewVisible = true
@@ -47,6 +48,7 @@ local version = ""
 local problem = ""
 local problemParams = {}
 local message = ""
+local savedSnapshot = ""
 local username, password = "", ""
 local credentialsReady = false
 local credentialGeneration = 0
@@ -76,6 +78,7 @@ local function publish()
         problem = problem, problemParams = problemParams, opened = opened,
         url = serverUrl, defaultCamera = defaultCamera,
         credentialsReady = credentialsReady, hasCredentials = username ~= "",
+        savedSnapshot = savedSnapshot, savingSnapshot = pending.snapshot ~= nil,
     })
 end
 
@@ -101,6 +104,7 @@ end
 local function clearFrames()
     frameEpoch = frameEpoch + 1
     frame = ""
+    savedSnapshot = ""
     failures = 0
     nextFrameAt = 0
     for _, path in ipairs(files) do noctalia.removeFile(path) end
@@ -168,9 +172,11 @@ local function discover()
             fail("invalidResponse", response)
         else
             local discovered = {}
+            detectHeights = {}
             for name, camera in pairs(value.cameras) do
                 if type(name) == "string" and type(camera) == "table" and name ~= "birdseye" then
                     table.insert(discovered, name)
+                    detectHeights[name] = type(camera.detect) == "table" and tonumber(camera.detect.height) or nil
                 end
             end
             table.sort(discovered)
@@ -212,10 +218,12 @@ requestFrame = function()
     if not opened or not previewVisible or not credentialsReady or baseUrl == "" or currentCamera() == "" or frameInFlight then return end
     if not frameDir then message = "runtimeUnavailable"; publish(); return end
     local generation, cameraGeneration = epoch, frameEpoch
+    -- latest.jpg is the detect frame; asking for more than its height only upscales it.
+    local height = math.min(detectHeights[currentCamera()] or 640, 720)
     frameInFlight = true
     local accepted = noctalia.http({
         url = baseUrl .. "/api/" .. noctalia.string.urlEncode(currentCamera())
-            .. "/latest.jpg?height=640&quality=75&t=" .. tostring(noctalia.nowMs()),
+            .. "/latest.jpg?height=" .. tostring(height) .. "&quality=90&t=" .. tostring(noctalia.nowMs()),
         basic_username = username ~= "" and username or nil,
         basic_password = username ~= "" and password or nil,
         follow_redirects = false,
@@ -268,6 +276,39 @@ requestFrame = function()
         fail("cannotReachServer")
         publish()
     end
+end
+
+-- XDG_PICTURES_DIR is localized (e.g. ~/Imagens), so read user-dirs.dirs instead of assuming ~/Pictures.
+local function snapshotDir()
+    local home = noctalia.expandPath("~")
+    local configDir = noctalia.getenv("XDG_CONFIG_HOME") or (home .. "/.config")
+    local dirs = noctalia.readFile(configDir .. "/user-dirs.dirs") or ""
+    local dir = ("\n" .. dirs):match('\nXDG_PICTURES_DIR="([^"]+)"')
+    dir = dir and dir:gsub("^%$HOME", home) or (home .. "/Pictures")
+    return dir .. "/cameras"
+end
+
+local function saveSnapshot(live)
+    local camera = currentCamera()
+    if camera == "" then return end
+    -- Recording frames are full resolution but only exist once the ~10 s segment is written; latest.jpg is detect-sized.
+    local frameTime = os.time() - (live and 0 or 30)
+    local path = live and ("/latest.jpg?quality=95&t=" .. tostring(noctalia.nowMs()))
+        or ("/recordings/" .. tostring(frameTime) .. "/snapshot.jpg")
+    local accepted = request("/api/" .. noctalia.string.urlEncode(camera) .. path, "snapshot", function(response)
+        local jpeg = response.body or ""
+        local valid = not responseError(response) and jpeg:sub(1, 3) == "\255\216\255" and jpeg:sub(-2) == "\255\217"
+        if not valid and not live then saveSnapshot(true); return end
+        local dir = snapshotDir()
+        local file = dir .. "/" .. camera:gsub("[^%w%-_]", "_") .. "-" .. os.date("%Y-%m-%d_%H-%M-%S", frameTime) .. ".jpg"
+        if valid and noctalia.mkdirAll(dir) and noctalia.writeFile(file, jpeg) then
+            savedSnapshot = file
+        else
+            noctalia.notifyError(noctalia.tr("title"), noctalia.tr("snapshotSaveFailed"))
+        end
+        publish()
+    end)
+    if accepted then publish() end
 end
 
 -- Health success discovers cameras when none are known yet.
@@ -398,6 +439,8 @@ state.watch("command", function(command)
         -- Debounced so typing does not fire a request per keystroke.
         urlDraft = command.value
         urlApplyAt = noctalia.nowMs() + 800
+    elseif action == "snapshot" then
+        saveSnapshot(false)
     elseif action == "discover" then
         discover()
     elseif action == "retry" or action == "reloadCredentials" then

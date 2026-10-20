@@ -42,5 +42,8 @@
   "editCredentials": "Credenciais",
   "credentialsSet": "Salvas no keyring do sistema",
   "credentialsNone": "Sem autenticação",
-  "terminalFailed": "Não foi possível abrir um terminal para as credenciais do keyring."
+  "terminalFailed": "Não foi possível abrir um terminal para as credenciais do keyring.",
+  "saveSnapshot": "Salvar foto da câmera",
+  "snapshotSaved": "Salvo em {path}",
+  "snapshotSaveFailed": "Não foi possível salvar a foto."
 }

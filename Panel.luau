@@ -29,7 +29,7 @@ local function hasProblem()
     return view.problem ~= nil and view.problem ~= ""
 end
 
-local function statusRow()
+local function statusRow(action)
     local color, text = "on_surface_variant", tr("connecting")
     if hasProblem() then
         color, text = "error", tr(view.problem, view.problemParams)
@@ -40,6 +40,7 @@ local function statusRow()
     return ui.row({ gap = 8, align = "center" }, {
         ui.box({ width = 8, height = 8, radius = 4, fill = color }),
         ui.label({ text = text, color = "on_surface_variant", maxLines = 2, flexGrow = 1 }),
+        action,
     })
 end
 
@@ -115,7 +116,11 @@ local function viewerPage()
         table.insert(content, notice("device-cctv", "on_surface_variant",
             tr(view.connected and "loadingStream" or "connecting"), nil, nil))
     end
-    table.insert(content, statusRow())
+    local saved = view.savedSnapshot or ""
+    local snapshot = view.frame and view.frame ~= "" and ui.button({ glyph = saved ~= "" and "check" or "camera", variant = "ghost",
+        tooltip = saved ~= "" and tr("snapshotSaved", { path = saved }) or tr("saveSnapshot"),
+        enabled = not view.savingSnapshot, onClick = function() command("snapshot") end }) or nil
+    table.insert(content, statusRow(snapshot))
     if view.message and view.message ~= "" then
         table.insert(content, ui.label({ text = tr(view.message), maxLines = 2, color = "error" }))
     end

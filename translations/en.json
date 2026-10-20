@@ -42,5 +42,8 @@
   "editCredentials": "Credentials",
   "credentialsSet": "Stored in the system keyring",
   "credentialsNone": "No authentication",
-  "terminalFailed": "Could not open a terminal for keyring credentials."
+  "terminalFailed": "Could not open a terminal for keyring credentials.",
+  "saveSnapshot": "Save snapshot",
+  "snapshotSaved": "Saved to {path}",
+  "snapshotSaveFailed": "Could not save the snapshot."
 }

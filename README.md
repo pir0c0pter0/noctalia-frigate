@@ -86,6 +86,12 @@ keys to cycle, including wraparound. Native controls support keyboard focus;
 theme, scale, hover feedback, tooltips, placement and outside-click dismissal
 are supplied by Noctalia. The close button follows the shell's setting.
 
+The camera button next to the connection status saves a snapshot to
+`$XDG_PICTURES_DIR/cameras` (for example `~/Pictures/cameras`). It saves the
+full-resolution recording frame from about 30 seconds earlier, because newer
+recording segments are not written yet. If the camera is not recording, it
+saves the current detect-resolution image instead.
+
 `settings.example.toml` shows a named bar widget definition;
 merge these into your configuration rather than replacing your existing file.
 
@@ -133,8 +139,9 @@ configuration lives in `noctalia.pluginDataDir()/viewer.json`, honoring
   Late callbacks after camera, configuration or panel changes cannot replace the current image.
 - Failures back off from 2 seconds to a 30-second maximum. A successful frame
   resets the delay. The last valid image remains visible during transient errors.
-- Frigate returns images bounded to 640 pixels high at JPEG quality 75. This
-  reduces transfer, decode and texture-upload work while covering a 2× preview.
+- Previews come from Frigate's detect frame at JPEG quality 90, at the camera's
+  detect height capped at 720 pixels, so they are never upscaled server-side.
+  For sharper previews, raise the camera's `detect` resolution in Frigate.
 - Only the current and previous temporary JPEG are retained under a private
   `$XDG_RUNTIME_DIR` session directory. Unique filenames refresh the host image
   control correctly. Files are removed on close/unload; a crash may leave up to
