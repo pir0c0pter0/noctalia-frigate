@@ -32,16 +32,14 @@ local detectHeights = {}
 local index = 1
 local opened = false
 local previewVisible = true
-local frame = ""
-local files = {}
+local previews = {}
 local frameSerial = 0
 local epoch = 0
-local frameEpoch = 0
 local pending = {}
 local frameInFlight = false
-local nextFrameAt = 0
+local stopped = false
+local updateInterval = 0
 local nextHealthAt = 0
-local failures = 0
 local connected = false
 local version = ""
 -- problem: connection/setup error shown as the panel state; message: preview error caption.
@@ -64,6 +62,13 @@ local function currentCamera()
     return selected[index] or ""
 end
 
+local function mainCamera()
+    for _, name in ipairs(selected) do
+        if name == defaultCamera then return name end
+    end
+    return selected[1] or ""
+end
+
 local function resetCamera()
     index = 1
     for i, name in ipairs(selected) do
@@ -71,10 +76,41 @@ local function resetCamera()
     end
 end
 
+local function removePreview(preview)
+    for _, path in ipairs(preview.files) do noctalia.removeFile(path) end
+end
+
+local function syncPreviews()
+    local main = mainCamera()
+    local visible = opened and previewVisible and currentCamera() or ""
+    local ready = not stopped and credentialsReady and baseUrl ~= "" and frameDir ~= nil
+    for name, preview in pairs(previews) do
+        if not ready or (name ~= main and name ~= visible) then
+            removePreview(preview)
+            previews[name] = nil
+        end
+    end
+    if ready then
+        for _, name in ipairs({ main, visible }) do
+            if name ~= "" and not previews[name] then
+                previews[name] = { frame = "", files = {}, nextAt = 0, failures = 0, message = "" }
+            end
+        end
+    end
+    local interval = next(previews) and 100 or 1000
+    if updateInterval ~= interval then
+        updateInterval = interval
+        noctalia.setUpdateInterval(interval)
+    end
+end
+
 local function publish()
+    syncPreviews()
+    local preview = previews[currentCamera()]
     state.set("viewer", {
         camera = currentCamera(), index = index, cameras = cameras, selected = selected,
-        connected = connected, version = version, frame = frame, message = message,
+        connected = connected, version = version, frame = preview and preview.frame or "",
+        message = message ~= "" and message or (preview and preview.message or ""),
         problem = problem, problemParams = problemParams, opened = opened,
         url = serverUrl, defaultCamera = defaultCamera,
         credentialsReady = credentialsReady, hasCredentials = username ~= "",
@@ -102,13 +138,9 @@ local function persist()
 end
 
 local function clearFrames()
-    frameEpoch = frameEpoch + 1
-    frame = ""
     savedSnapshot = ""
-    failures = 0
-    nextFrameAt = 0
-    for _, path in ipairs(files) do noctalia.removeFile(path) end
-    files = {}
+    for _, preview in pairs(previews) do removePreview(preview) end
+    previews = {}
 end
 
 local function configureUrl()
@@ -201,7 +233,7 @@ local function health()
         local err = responseError(response)
         if err then
             fail(err, response)
-            -- Reconnect quickly while the panel is open (closed update ticks are 30 s).
+            -- The main camera keeps reconnecting even while the panel is closed.
             nextHealthAt = noctalia.nowMs() + 5000
         else
             local value = noctalia.json.decode(response.body)
@@ -215,21 +247,30 @@ local function health()
 end
 
 requestFrame = function()
-    if not opened or not previewVisible or not credentialsReady or baseUrl == "" or currentCamera() == "" or frameInFlight then return end
+    syncPreviews()
+    if stopped or not credentialsReady or baseUrl == "" or mainCamera() == "" or frameInFlight then return end
     if not frameDir then message = "runtimeUnavailable"; publish(); return end
-    local generation, cameraGeneration = epoch, frameEpoch
+    local camera = opened and previewVisible and currentCamera() or mainCamera()
+    local preview, main = previews[camera], previews[mainCamera()]
+    -- Serve the oldest due camera so the visible camera cannot starve the main one.
+    if main and (not preview or main.nextAt < preview.nextAt) then camera, preview = mainCamera(), main end
+    local now = noctalia.nowMs()
+    if not preview or now < preview.nextAt then return end
+    local generation = epoch
     -- latest.jpg is the detect frame; asking for more than its height only upscales it.
-    local height = math.min(detectHeights[currentCamera()] or 640, 720)
+    local height = math.min(detectHeights[camera] or 640, 720)
+    -- Budget 5 fps from request start, including network time instead of adding it.
+    preview.nextAt = now + 200
     frameInFlight = true
     local accepted = noctalia.http({
-        url = baseUrl .. "/api/" .. noctalia.string.urlEncode(currentCamera())
-            .. "/latest.jpg?height=" .. tostring(height) .. "&quality=90&t=" .. tostring(noctalia.nowMs()),
+        url = baseUrl .. "/api/" .. noctalia.string.urlEncode(camera)
+            .. "/latest.jpg?height=" .. tostring(height) .. "&quality=90&t=" .. tostring(now),
         basic_username = username ~= "" and username or nil,
         basic_password = username ~= "" and password or nil,
         follow_redirects = false,
     }, function(response)
         frameInFlight = false
-        if generation ~= epoch or cameraGeneration ~= frameEpoch or not opened or not previewVisible then
+        if generation ~= epoch or previews[camera] ~= preview or stopped then
             requestFrame()
             return
         end
@@ -244,35 +285,36 @@ requestFrame = function()
             frameSerial = frameSerial + 1
             local path = frameDir .. "/frame-" .. tostring(frameSerial) .. ".jpg"
             if noctalia.writeFile(path, jpeg) then
-                frame = path
-                table.insert(files, path)
+                preview.frame = path
+                table.insert(preview.files, path)
                 -- Unique paths force native image reloads; keep only current + previous frame.
-                while #files > 2 do noctalia.removeFile(table.remove(files, 1)) end
-                failures = 0
+                while #preview.files > 2 do noctalia.removeFile(table.remove(preview.files, 1)) end
+                preview.failures = 0
                 connected = true
                 problem = ""
-                message = ""
-                nextFrameAt = noctalia.nowMs() + 1000
+                preview.message = ""
                 publish()
+                requestFrame()
                 return
             end
             noctalia.removeFile(path)
             err = "snapshotWriteFailed"
         end
-        failures = math.min(failures + 1, 5)
-        nextFrameAt = noctalia.nowMs() + math.min(30000, 2000 * 2 ^ (failures - 1))
+        preview.failures = math.min(preview.failures + 1, 5)
+        preview.nextAt = noctalia.nowMs() + math.min(30000, 2000 * 2 ^ (preview.failures - 1))
         if netErr == "authFailed" or netErr == "cannotReachServer" then
             fail(netErr, response)
         else
             -- A single camera failing (offline, 404, bad image) is not a server problem.
-            message = err == "snapshotWriteFailed" and err or "streamError"
+            preview.message = err == "snapshotWriteFailed" and err or "streamError"
         end
         publish()
+        requestFrame()
     end)
     if not accepted then
         frameInFlight = false
-        failures = math.min(failures + 1, 5)
-        nextFrameAt = noctalia.nowMs() + math.min(30000, 2000 * 2 ^ (failures - 1))
+        preview.failures = math.min(preview.failures + 1, 5)
+        preview.nextAt = noctalia.nowMs() + math.min(30000, 2000 * 2 ^ (preview.failures - 1))
         fail("cannotReachServer")
         publish()
     end
@@ -375,7 +417,7 @@ function update()
     local now = noctalia.nowMs()
     if urlApplyAt and now >= urlApplyAt then applyUrl() end
     if credentialsReady and now >= nextHealthAt then health() end
-    if opened and previewVisible and now >= nextFrameAt then requestFrame() end
+    requestFrame()
 end
 
 state.watch("command", function(command)
@@ -393,27 +435,26 @@ state.watch("command", function(command)
     if action == "open" then
         opened = true
         previewVisible = true
-        clearFrames()
+        savedSnapshot = ""
         resetCamera()
         message = ""
-        noctalia.setUpdateInterval(1000)
         publish()
         connect()
     elseif action == "close" then
         opened = false
         if urlApplyAt then applyUrl() end
-        clearFrames()
-        noctalia.setUpdateInterval(30000)
+        savedSnapshot = ""
+        resetCamera()
         publish()
+        requestFrame()
     elseif action == "preview" then
         previewVisible = command.value == true
-        clearFrames()
         publish()
         requestFrame()
     elseif action == "next" or action == "previous" then
         if #selected > 0 then
             index = (index - 1 + (action == "next" and 1 or -1)) % #selected + 1
-            clearFrames()
+            savedSnapshot = ""
             message = ""
             publish()
             requestFrame()
@@ -432,7 +473,7 @@ state.watch("command", function(command)
         selected = nextSelected
         autoSelect = false
         resetCamera()
-        clearFrames()
+        savedSnapshot = ""
         message = ""
         persist()
         publish()
@@ -442,6 +483,7 @@ state.watch("command", function(command)
         defaultCamera = command.value
         persist()
         publish()
+        requestFrame()
     elseif action == "url" then
         if type(command.value) ~= "string" then return end
         -- Debounced so typing does not fire a request per keystroke.
@@ -464,6 +506,7 @@ function onIpc(event)
 end
 
 function onExit()
+    stopped = true
     opened = false
     epoch = epoch + 1
     credentialGeneration = credentialGeneration + 1
@@ -476,5 +519,4 @@ resetCamera()
 problem = urlError
 if not savedFileExists then persist() end
 publish()
-noctalia.setUpdateInterval(30000)
 loadCredentials()

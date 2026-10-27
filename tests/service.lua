@@ -113,10 +113,151 @@ test("doorbell opens the panel; an already open viewer returns to the main camer
     assert(h.state.panelPage == "viewer")
 end)
 
-test("no preview requests while closed; health is low frequency", function()
+test("without selected cameras only health runs", function()
     local h = boot()
     assert(#h.requests == 1 and h.requests[1].request.url:match("/api/version$"))
-    assert(h.interval == 30000)
+    assert(h.interval >= 1000)
+end)
+
+test("main camera stays warm while closed and opens without discarding its frame", function()
+    local h = selectedBoot({ defaultCamera = "side" })
+    local first = h:find("/api/side/latest.jpg")
+    h:reply(first, "\255\216\255warm\255\217")
+    local frame = h.state.viewer.frame
+    assert(frame ~= "" and h.files[frame])
+    h:command("open")
+    assert(h.state.viewer.frame == frame)
+    h:command("close")
+    assert(h.state.viewer.frame == frame and h.files[frame])
+    h.time = h.time + 200
+    h.env.update()
+    local second = h:find("/api/side/latest.jpg")
+    assert(second ~= first)
+    h:reply(second, "\255\216\255fresh\255\217")
+    h:command("open")
+    assert(h.files[h.state.viewer.frame] == "\255\216\255fresh\255\217")
+end)
+
+test("preview cadence includes request latency instead of adding an idle second", function()
+    local h = selectedBoot()
+    h:command("open")
+    for _ = 1, 5 do
+        local i = h:find("latest.jpg")
+        h.time = h.time + 150
+        h:reply(i, "\255\216\255ok\255\217")
+        h.time = h.time + 50
+        h.env.update()
+        assert(h:find("latest.jpg") ~= i, "next frame must start within 200 ms of the previous start")
+    end
+end)
+
+test("main camera keeps updating while another camera is visible", function()
+    local h = selectedBoot()
+    h:reply(h:find("/api/front/latest.jpg"), "\255\216\255main\255\217")
+    h:command("open")
+    h:command("next")
+    local side = h:find("/api/side/latest.jpg")
+    h:reply(side, "\255\216\255side\255\217")
+    local visible = h.state.viewer.frame
+    local main = h:find("/api/front/latest.jpg")
+    h.time = h.time + 200
+    h.env.update()
+    if h:find("/api/front/latest.jpg") == main then
+        h:reply(h:find("/api/side/latest.jpg"), "\255\216\255side\255\217")
+    end
+    main = h:find("/api/front/latest.jpg")
+    assert(main > side)
+    h:reply(main, "\255\216\255main-fresh\255\217")
+    assert(h.state.viewer.camera == "side" and h.files[h.state.viewer.frame]:find("side"))
+    h:command("close")
+    assert(h.state.viewer.camera == "front" and h.files[h.state.viewer.frame]:find("main%-fresh"))
+    assert(not h.files[visible])
+end)
+
+test("slow preview responses never build a queue and resume immediately when overdue", function()
+    local h = selectedBoot()
+    local first = h:find("latest.jpg")
+    local before = #h.requests
+    for _ = 1, 10 do
+        h.time = h.time + 100
+        h.env.update()
+        assert(#h.requests == before)
+    end
+    h:reply(first, "\255\216\255slow\255\217")
+    assert(h:find("latest.jpg") ~= first and #h.requests == before + 1)
+    h.env.update()
+    assert(#h.requests == before + 1)
+end)
+
+test("changing the main camera while closed drops its old pending response", function()
+    local h = selectedBoot()
+    local old = h:find("/api/front/latest.jpg")
+    h:command("default", "side")
+    h:reply(old, "\255\216\255old\255\217")
+    local current = h:find("/api/side/latest.jpg")
+    assert(current > old)
+    h:reply(current, "\255\216\255new\255\217")
+    h:command("open")
+    assert(h.state.viewer.camera == "side" and h.files[h.state.viewer.frame] == "\255\216\255new\255\217")
+end)
+
+test("a previous visible camera cannot publish after navigating again", function()
+    local h = selectedBoot({ files = { ["/data/viewer.json"] = {
+        frigateUrl = "https://frigate.example.com", selectedCameras = { "front", "side", "back" },
+    } } })
+    h:reply(h:find("latest.jpg"), "\255\216\255main\255\217")
+    h:command("open")
+    h:command("next")
+    local side = h:find("/api/side/latest.jpg")
+    h:command("next")
+    h:reply(side, "bad", 401)
+    assert(h.state.viewer.camera == "back" and h.state.viewer.problem == "" and h.state.viewer.frame == "")
+    h:reply(h:find("/api/back/latest.jpg"), "\255\216\255back\255\217")
+    assert(h.files[h.state.viewer.frame] == "\255\216\255back\255\217")
+end)
+
+test("two preview caches stay bounded and unloading ignores the pending response", function()
+    local h = selectedBoot()
+    h:command("open")
+    h:command("next")
+    local replied = 0
+    for _ = 1, 30 do
+        h.time = h.time + 100
+        h.env.update()
+        local i = h:find("latest.jpg")
+        if i ~= replied then
+            h:reply(i, "\255\216\255ok\255\217")
+            replied = i
+        end
+        local files = 0
+        for path in pairs(h.files) do if path:match("%.jpg$") then files = files + 1 end end
+        assert(files <= 4)
+    end
+    h.time = h.time + 200
+    h.env.update()
+    local pending = h:find("latest.jpg")
+    assert(pending ~= replied)
+    h.env.onExit()
+    local before = #h.requests
+    h:reply(pending, "\255\216\255late\255\217")
+    assert(#h.requests == before)
+    for path in pairs(h.files) do assert(not path:match("%.jpg$")) end
+end)
+
+test("a main camera error backs off independently of the visible camera", function()
+    local h = selectedBoot()
+    local main = h:find("/api/front/latest.jpg")
+    h:command("open")
+    h:command("next")
+    h:reply(main, "bad", 500)
+    h:reply(h:find("/api/side/latest.jpg"), "\255\216\255side\255\217")
+    for _ = 1, 4 do
+        h.time = h.time + 200
+        h.env.update()
+        h:reply(h:find("/api/side/latest.jpg"), "\255\216\255side\255\217")
+    end
+    assert(h:find("/api/front/latest.jpg") == main)
+    assert(h.state.viewer.message == "" and h.files[h.state.viewer.frame] == "\255\216\255side\255\217")
 end)
 
 test("opening resets default; navigation wraps in both directions", function()
@@ -145,6 +286,9 @@ test("preview asks for the camera's detect height, capped at 720", function()
     local h = selectedBoot()
     h:command("discover")
     h:reply(h:find("/api/config"), { cameras = { front = { detect = { height = 288 } }, side = { detect = { height = 2160 } } } })
+    h:reply(h:find("latest.jpg"), "\255\216\255initial\255\217")
+    h.time = h.time + 200
+    h.env.update()
     h:command("open")
     assert(h.requests[h:find("latest.jpg")].request.url:find("height=288&", 1, true))
     h:command("next")
@@ -152,26 +296,28 @@ test("preview asks for the camera's detect height, capped at 720", function()
     assert(h.requests[h:find("latest.jpg")].request.url:find("height=720&", 1, true))
 end)
 
-test("one snapshot in flight; closing ignores late results and cleans images", function()
+test("one preview in flight; closing discards the other camera's late result", function()
     local h = selectedBoot()
     h:command("open")
     local i = h:find("latest.jpg")
     local before = #h.requests
-    h.time = h.time + 1000
+    h.time = h.time + 100
     h.env.update()
     assert(#h.requests == before)
     h:reply(i, "\255\216\255jpeg\255\217")
     assert(h.state.viewer.frame ~= "" and h.files[h.state.viewer.frame])
-    h.time = h.time + 1000
-    h.env.update()
-    i = h:find("latest.jpg")
+    h:command("next")
+    i = h:find("/api/side/latest.jpg")
+    before = #h.requests
     h:command("close")
+    assert(#h.requests == before)
     h:reply(i, "\255\216\255late\255\217")
-    assert(h.state.viewer.frame == "" and h.interval == 30000)
+    assert(h.state.viewer.camera == "front" and h.files[h.state.viewer.frame] == "\255\216\255jpeg\255\217")
+    h.env.onExit()
     for path in pairs(h.files) do assert(not path:match("%.jpg$")) end
 end)
 
-test("camera change discards stale frame without corrupting new request", function()
+test("a main camera response cannot replace another camera's visible frame", function()
     local h = selectedBoot()
     h:command("open")
     local old = h:find("latest.jpg")
@@ -352,17 +498,24 @@ test("changing servers drops old discovery and rediscovers once connected", func
     assert(h.requests[h:find("/api/config")].request.url:find("new.example.com", 1, true))
 end)
 
-test("camera picker pauses snapshots until returning to preview", function()
+test("settings keeps only the main camera running and returning reuses its frame", function()
     local h = selectedBoot()
     h:command("open")
+    h:reply(h:find("/api/front/latest.jpg"), "\255\216\255main\255\217")
+    h:command("next")
+    local side = h:find("/api/side/latest.jpg")
     h:command("preview", false)
-    h:reply(h:find("latest.jpg"), "\255\216\255old\255\217")
-    local before = #h.requests
-    h.time = h.time + 1000
+    h:reply(side, "\255\216\255old\255\217")
+    h.time = h.time + 200
     h.env.update()
-    assert(#h.requests == before and h.interval == 1000)
+    local i = h:find("latest.jpg")
+    assert(h.requests[i].request.url:find("/api/front/latest.jpg", 1, true))
+    h:reply(i, "\255\216\255warm\255\217")
+    assert(h.state.viewer.frame == "")
     h:command("preview", true)
-    assert(#h.requests == before + 1 and h.interval == 1000)
+    h:reply(h:find("/api/side/latest.jpg"), "\255\216\255side\255\217")
+    h:command("previous")
+    assert(h.files[h.state.viewer.frame] == "\255\216\255warm\255\217")
 end)
 
 test("keyring lookup failures do not issue unauthenticated requests", function()
@@ -376,8 +529,10 @@ end)
 
 test("rejected HTTP starts back off instead of spinning", function()
     local h = selectedBoot()
+    h:reply(h:find("latest.jpg"), "\255\216\255ok\255\217")
+    h.time = h.time + 200
     h.rejectHttp = true
-    h:command("open")
+    h.env.update()
     assert(h.state.viewer.problem == "cannotReachServer")
     h.rejectHttp = false
     local before = #h.requests

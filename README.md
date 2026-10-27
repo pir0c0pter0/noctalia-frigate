@@ -77,7 +77,7 @@ server's cameras, so the plugin has no native settings.
    until you toggle them under **Cameras in the viewer**.
 3. Pick the **Main camera** from the list; it opens first every time.
 
-The plugin reconnects on its own (every 5 seconds while the panel is open).
+The plugin reconnects on its own (health retries every 5 seconds).
 Errors replace the preview with a short explanation and the action that fixes
 it: open settings, edit credentials or try again.
 
@@ -164,21 +164,32 @@ configuration lives in `noctalia.pluginDataDir()/viewer.json`, honoring
 
 - A singleton viewer service shares connection/camera state across bar instances.
   An independent doorbell service monitors the button when configured; it does
-  not fetch camera frames while the panel is closed.
+  not fetch camera frames itself.
 - Native asynchronous HTTP handles JSON and binary JPEGs. There is **no curl,
   shell pipeline or base64 encoding per frame**.
-- Preview requests run about once per second, one at a time. They stop when the
-  panel closes or the Settings page is shown; health checks run every 30 seconds.
-  Late callbacks after camera, configuration or panel changes cannot replace the current image.
-- Failures back off from 2 seconds to a 30-second maximum. A successful frame
-  resets the delay. The last valid image remains visible during transient errors.
+- The main camera stays updated in the background, including with the panel
+  closed or on Settings. Opening reuses its latest image immediately. Without an
+  explicit main camera, the first selected camera is kept ready.
+- Previews target **5 updates per second per camera**, measured from request start
+  so network time does not add an idle delay. Only one preview request runs at a
+  time; overdue frames are requested without building a queue. While viewing
+  another camera, it and the main camera share that request slot fairly.
+  Actual FPS depends on HTTP latency, the camera's detect FPS and host rendering.
+- Health checks run every 30 seconds. Preview failures back off independently per
+  camera from 2 seconds to a 30-second maximum; success resets that camera's delay.
+  The last valid image remains visible during transient errors. Responses for
+  removed cameras, old configuration or an unloaded service are ignored.
 - Previews come from Frigate's detect frame at JPEG quality 90, at the camera's
   detect height capped at 720 pixels, so they are never upscaled server-side.
   For sharper previews, raise the camera's `detect` resolution in Frigate.
-- Only the current and previous temporary JPEG are retained under a private
-  `$XDG_RUNTIME_DIR` session directory. Unique filenames refresh the host image
-  control correctly. Files are removed on close/unload; a crash may leave up to
-  two files in that session directory until the runtime directory is cleared.
+- Only the current and previous temporary JPEG per active camera are retained
+  under a private `$XDG_RUNTIME_DIR` session directory: two files for the main
+  camera, at most four while another camera is visible. Unique filenames refresh
+  the host image control correctly. Closing keeps only the main camera's files;
+  unloading removes all of them. A crash may leave up to four files until the
+  runtime directory is cleared.
+- Background updates use network bandwidth and JPEG encoding even with the panel
+  closed. Clearing the server URL or deselecting every camera stops preview work.
 - Native `ui.image` preserves aspect ratio and uses Noctalia's GPU rendering
   pipeline. **JPEG decoding is not hardware video decoding.** There is no video
   player, VA-API/RTSP/WebRTC pipeline, audio or recording playback in this plugin.

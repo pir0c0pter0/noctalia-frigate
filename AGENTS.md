@@ -35,7 +35,8 @@ GPU rendering or compositor behavior.
 Use 4-space indentation, PascalCase entry filenames, camelCase variables and
 translation keys. Prefer Noctalia's native APIs, controls and theme roles.
 Declare every `getConfig` key in `plugin.toml`. Keep preview work single-flight,
-ignore stale responses, bound temporary files and stop preview requests on close.
+ignore stale responses and bound temporary files. Keep the main camera warm in
+the background; stop other cameras' preview requests on close or Settings.
 
 ## Changes and security
 
