@@ -13,6 +13,10 @@ dependencies = ["bash", "secret-tool"]
 id = "service"
 entry = "Main.luau"
 
+[[service]]
+id = "doorbell"
+entry = "Doorbell.luau"
+
 [[widget]]
 id = "bar"
 entry = "BarWidget.luau"

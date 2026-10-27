@@ -382,6 +382,14 @@ state.watch("command", function(command)
     if type(command) ~= "table" then return end
     state.set("command", nil)
     local action = command.action
+    if action == "ring" then
+        state.set("panelPage", "viewer")
+        if not opened then
+            noctalia.togglePanel("pir0c0pter0/frigate:viewer")
+            return
+        end
+        action = "open"
+    end
     if action == "open" then
         opened = true
         previewVisible = true

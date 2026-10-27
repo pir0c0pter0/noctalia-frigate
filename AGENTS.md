@@ -4,6 +4,7 @@
 
 This is a Noctalia 5 native Luau plugin. Root entries: `Main.luau` (singleton
 service), `BarWidget.luau`, `Panel.luau`, `Credentials.sh`, and `plugin.toml`.
+`Doorbell.luau` independently monitors a Reolink doorbell's button.
 Translations live in `translations/en.json` and `translations/pt-BR.json`.
 `settings.example.toml` contains non-secret example configuration. `.planning/`
 includes historical v4 research and the Noctalia 5 migration record.
@@ -18,6 +19,7 @@ with the running Wayland session's `XDG_RUNTIME_DIR` and `WAYLAND_DISPLAY`.
 
 - `noctalia plugins lint .`: native manifest/settings checks
 - `lua tests/service.lua`: service behavior with stubbed host I/O
+- `lua tests/doorbell.lua`: direct button detection, auth and reconnect behavior
 - `lua tests/ui.lua`: panel/bar lifecycle and native controls
 - `bash tests/credentials.sh`: credential helper with a fake secret-tool
 - `bash -n Credentials.sh`: shell syntax

@@ -81,6 +81,37 @@ The plugin reconnects on its own (every 5 seconds while the panel is open).
 Errors replace the preview with a short explanation and the action that fixes
 it: open settings, edit credentials or try again.
 
+### Open when the Reolink doorbell is pressed
+
+The plugin can monitor a wired Reolink doorbell directly, without MQTT or Home
+Assistant. Pressing its button opens the viewer at the **Main camera**. If the
+viewer is already open, it returns to that camera and leaves the Settings page.
+
+1. In the Reolink app, enable **HTTP** or **HTTPS** under the doorbell's
+   **Network → Advanced → Server settings**. RTSP/ONVIF alone do not expose this
+   API. See [Reolink's port settings](https://support.reolink.com/articles/900000621783-How-to-Configure-Reolink-Ports-Settings/).
+2. In the viewer's **Settings → Reolink doorbell**, enter the doorbell's own
+   address, for example `http://doorbell.local` (include its port if customized).
+   Use HTTPS with a valid certificate, or HTTP only on a trusted local network;
+   certificate verification stays enabled. Do not enter the Frigate address here.
+3. Click **Credentials** in that section and save the doorbell's own login.
+   It is stored separately in the system keyring. Wait for **Waiting for the
+   doorbell button**; use **Try again** after fixing access or unlocking the keyring.
+4. Keep the doorbell selected as the **Main camera**, close the panel, then press
+   the physical button to verify it opens.
+
+The monitor uses native HTTP `Login` / `GetEvents` on channel 0 every two seconds,
+including while the panel is closed. Only the `visitor` button alarm triggers it;
+motion/person detection does not. Network failures back off up to 30 seconds.
+The first response establishes a baseline without opening the panel, and a held
+button alarm triggers only once. Very close presses during the same active alarm
+are treated as one press. Noctalia must be running; this does not unlock or wake
+the desktop. Clear the doorbell address to disable monitoring.
+
+Only the address is saved in `noctalia.pluginDataDir()/doorbell.json`. The
+`noctalia-frigate-doorbell` Secret Service entry holds its credentials; passwords
+are sent in the native login request body, never shell arguments or URL parameters.
+
 Click the icon to toggle the viewer. Use the arrow buttons or **Left / Right**
 keys to cycle, including wraparound. Native controls support keyboard focus;
 theme, scale, hover feedback, tooltips, placement and outside-click dismissal
@@ -131,7 +162,9 @@ configuration lives in `noctalia.pluginDataDir()/viewer.json`, honoring
 
 ## Performance and GPU
 
-- A singleton service shares connection/camera state across bar instances.
+- A singleton viewer service shares connection/camera state across bar instances.
+  An independent doorbell service monitors the button when configured; it does
+  not fetch camera frames while the panel is closed.
 - Native asynchronous HTTP handles JSON and binary JPEGs. There is **no curl,
   shell pipeline or base64 encoding per frame**.
 - Preview requests run about once per second, one at a time. They stop when the
@@ -158,19 +191,22 @@ changes; reload configuration after editing the manifest.
 ```bash
 noctalia plugins lint .
 lua tests/service.lua
+lua tests/doorbell.lua
 lua tests/ui.lua
 bash tests/credentials.sh
 bash -n Credentials.sh
 # Optional: official Luau compiler, when installed
-luau-compile --null Main.luau BarWidget.luau Panel.luau
+luau-compile --null Main.luau Doorbell.luau BarWidget.luau Panel.luau
 ```
 
 The tests stub host I/O and exercise the real entry scripts; they do not replace
 verification in a graphical Noctalia session against a real Frigate instance.
 Check connection/auth failures, portrait/landscape previews, camera selection,
 wraparound, reopen/default behavior, persistence, both languages and shell scaling.
+For doorbells, also check the physical button with the panel closed, while viewing
+another camera and while on Settings, plus reconnection without duplicate openings.
 
-Files: `Main.luau` (service), `BarWidget.luau`, `Panel.luau`, `Credentials.sh`,
+Files: `Main.luau` (viewer service), `Doorbell.luau` (button monitor), `BarWidget.luau`, `Panel.luau`, `Credentials.sh`,
 `plugin.toml`, `translations/`, and `tests/`. Historical v4 research is kept in
 `.planning/`; the migration record is `.planning/NOCTALIA-5.md`.
 

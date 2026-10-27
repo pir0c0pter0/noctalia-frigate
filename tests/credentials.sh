@@ -21,7 +21,7 @@ cat > "$check_dir/bin/noctalia" <<'FAKE'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "$FRIGATE_CHECK_DIR/ipc"
-[[ $* == 'msg plugin pir0c0pter0/frigate:service all refresh' ]]
+[[ $* == 'msg plugin pir0c0pter0/frigate:service all refresh' || $* == 'msg plugin pir0c0pter0/frigate:doorbell all refresh' ]]
 [[ ${FRIGATE_CHECK_IPC_FAIL:-0} != 1 ]]
 FAKE
 chmod +x "$check_dir/bin/secret-tool" "$check_dir/bin/noctalia"
@@ -49,4 +49,17 @@ if printf '%s\n%s\n\n' "$check_user" "$check_password" | bash Credentials.sh > "
     exit 1
 fi
 [[ $(wc -l < "$check_dir/ipc") == 3 ]]
+unset FRIGATE_CHECK_STORE_FAIL FRIGATE_CHECK_IPC_FAIL
+printf '%s\n%s\n\n' "$check_user" "$check_password" | bash Credentials.sh doorbell > "$check_dir/output"
+rg -Fq 'service noctalia-frigate-doorbell key password' "$check_dir/argv"
+rg -Fq 'service noctalia-frigate-doorbell key username' "$check_dir/argv"
+[[ $(tail -1 "$check_dir/ipc") == 'msg plugin pir0c0pter0/frigate:doorbell all refresh' ]]
+! rg -Fq -- "$check_user" "$check_dir/argv"
+! rg -Fq -- "$check_password" "$check_dir/argv"
+before=$(wc -l < "$check_dir/argv")
+if printf '\n\n' | bash Credentials.sh unexpected > "$check_dir/output" 2>&1; then
+    printf '%s\n' 'Expected rejection of unknown credential scope' >&2
+    exit 1
+fi
+[[ $(wc -l < "$check_dir/argv") == "$before" ]]
 printf '%s\n' 'credential store/clear, stdin-only secrets, automatic reload and failure handling: passed'

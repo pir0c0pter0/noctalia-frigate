@@ -1,6 +1,7 @@
 --!nonstrict
 local tr = noctalia.tr
 local view = noctalia.state.get("viewer") or {}
+local doorbell = noctalia.state.get("doorbell") or {}
 local opened = false
 local page = "viewer"
 local render
@@ -15,12 +16,12 @@ local function showPage(name)
     render()
 end
 
-function editCredentials()
+function editCredentials(scope)
     local dir = noctalia.pluginDir()
     if not dir then return end
     -- runInTerminal accepts a shell string; quote the path, never interpolate secrets.
     local script = (dir .. "/Credentials.sh"):gsub("'", "'\\''")
-    if not noctalia.runInTerminal("bash '" .. script .. "'") then
+    if not noctalia.runInTerminal("bash '" .. script .. "'" .. (scope == "doorbell" and " doorbell" or "")) then
         noctalia.notifyError(tr("title"), tr("terminalFailed"))
     end
 end
@@ -165,6 +166,20 @@ local function settingsPage()
         ui.label({ text = tr("defaultCameraHint"), maxLines = 2, color = "on_surface_variant" }),
     })
 
+    local bell = section(tr("doorbellTitle"), {
+        ui.input({ key = "doorbellUrl", value = doorbell.url or "", placeholder = "http://doorbell.local",
+            onChange = function(text) noctalia.state.set("doorbellCommand", { action = "url", value = text }) end }),
+        ui.label({ text = tr("doorbellHint"), maxLines = 4, color = "on_surface_variant" }),
+        ui.label({ text = tr(doorbell.status or "doorbellDisabled"), maxLines = 3,
+            color = doorbell.status == "doorbellListening" and "primary" or "on_surface_variant" }),
+        ui.row({ gap = 8 }, {
+            ui.button({ key = "doorbellCredentials", glyph = "key", text = tr("editCredentials"),
+                onClick = function() editCredentials("doorbell") end }),
+            ui.button({ key = "doorbellRetry", glyph = "refresh", text = tr("retry"),
+                onClick = function() noctalia.state.set("doorbellCommand", { action = "retry" }) end }),
+        }),
+    })
+
     local list = {
         ui.row({ gap = 8, align = "center" }, {
             ui.label({ text = tr("camerasSelected", { count = #selected }), color = "on_surface_variant", flexGrow = 1 }),
@@ -187,7 +202,7 @@ local function settingsPage()
     return {
         headerButtons(header),
         ui.scroll({ key = "settings", flexGrow = 1, gap = 20 }, {
-            server, main, section(tr("visibleCameras"), list),
+            server, main, bell, section(tr("visibleCameras"), list),
         }),
     }
 end
@@ -201,6 +216,11 @@ end
 noctalia.state.watch("viewer", function(value)
     view = value or {}
     render()
+end)
+
+noctalia.state.watch("doorbell", function(value)
+    doorbell = value or {}
+    if page == "settings" then render() end
 end)
 
 -- The bar's right click asks for the settings page, even while already open.

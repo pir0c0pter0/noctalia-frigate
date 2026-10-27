@@ -32,6 +32,7 @@ local function boot(options)
         removeFile = function(path) h.files[path] = nil; h.removed[#h.removed + 1] = path; return true end,
         mkdirAll = function() return true end,
         setUpdateInterval = function(ms) h.interval = ms end,
+        togglePanel = function(id) h.openedPanel = id; h.panelOpens = (h.panelOpens or 0) + 1 end,
         commandExists = function() return options.keyring == true end,
         runAsync = function(argv, callback)
             h.commands[#h.commands + 1] = { argv = argv, callback = callback }
@@ -53,7 +54,10 @@ local function boot(options)
             end)) end,
         },
         state = {
-            set = set, get = function(key) return h.state[key] end,
+            set = function(key, value)
+                if options.noSelfWatch and key == "command" then h.state[key] = value else set(key, value) end
+            end,
+            get = function(key) return h.state[key] end,
             watch = function(key, callback)
                 h.watchers[key] = h.watchers[key] or {}
                 table.insert(h.watchers[key], callback)
@@ -96,6 +100,18 @@ local function selectedBoot(options)
     } }
     return boot(options)
 end
+
+test("doorbell opens the panel; an already open viewer returns to the main camera", function()
+    local h = selectedBoot({ defaultCamera = "side", noSelfWatch = true })
+    h:command("ring")
+    assert(h.openedPanel == "pir0c0pter0/frigate:viewer" and h.state.panelPage == "viewer")
+    h:command("open")
+    h:command("next")
+    h:command("preview", false)
+    h:command("ring")
+    assert(h.panelOpens == 1 and h.state.viewer.camera == "side" and h.state.viewer.opened)
+    assert(h.state.panelPage == "viewer")
+end)
 
 test("no preview requests while closed; health is low frequency", function()
     local h = boot()
