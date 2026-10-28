@@ -9,6 +9,7 @@
   "doorbellDisabled": "Abertura automática desativada.",
   "doorbellConnecting": "Conectando à campainha…",
   "doorbellListening": "Aguardando o botão da campainha.",
+  "doorbellFallback": "Conexão de eventos indisponível; verificando o botão periodicamente enquanto tenta reconectar. Alguns toques podem não ser detectados.",
   "doorbellCredentialsMissing": "Salve o usuário e a senha da própria campainha em Credenciais abaixo.",
   "doorbellAuthFailed": "Falha no login da campainha. Verifique as credenciais e tente de novo.",
   "doorbellUnavailable": "Campainha inacessível. Confira se o acesso HTTP/HTTPS está ativado. Tentando de novo automaticamente.",

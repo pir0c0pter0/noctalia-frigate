@@ -87,9 +87,8 @@ The plugin can monitor a wired Reolink doorbell directly, without MQTT or Home
 Assistant. Pressing its button opens the viewer at the **Main camera**. If the
 viewer is already open, it returns to that camera and leaves the Settings page.
 
-1. In the Reolink app, enable **HTTP** or **HTTPS** under the doorbell's
-   **Network → Advanced → Server settings**. RTSP/ONVIF alone do not expose this
-   API. See [Reolink's port settings](https://support.reolink.com/articles/900000621783-How-to-Configure-Reolink-Ports-Settings/).
+1. In the Reolink app, enable **HTTP** or **HTTPS** and **ONVIF** under the doorbell's
+   **Network → Advanced → Server settings**. See [Reolink's port settings](https://support.reolink.com/articles/900000621783-How-to-Configure-Reolink-Ports-Settings/).
 2. In the viewer's **Settings → Reolink doorbell**, enter the doorbell's own
    address, for example `http://doorbell.local` (include its port if customized).
    Use HTTPS with a valid certificate, or HTTP only on a trusted local network;
@@ -100,17 +99,17 @@ viewer is already open, it returns to that camera and leaves the Settings page.
 4. Keep the doorbell selected as the **Main camera**, close the panel, then press
    the physical button to verify it opens.
 
-The monitor uses native HTTP `Login` / `GetEvents` on channel 0 every two seconds,
-including while the panel is closed. Only the `visitor` button alarm triggers it;
-motion/person detection does not. Network failures back off up to 30 seconds.
-The first response establishes a baseline without opening the panel, and a held
-button alarm triggers only once. Very close presses during the same active alarm
-are treated as one press. Noctalia must be running; this does not unlock or wake
-the desktop. Clear the doorbell address to disable monitoring.
+The monitor uses native HTTP and subscribes to ONVIF visitor events, including
+while the panel is closed. Motion/person detection does not open the viewer. If
+the event connection is unavailable, the panel reports a fallback mode that
+checks the button every two seconds while retrying the subscription; presses may
+be missed in fallback mode or during a disconnection. Initial states and repeated
+active alarms do not reopen the panel. Noctalia must be running; this does not
+unlock or wake the desktop. Clear the doorbell address to disable monitoring.
 
 Only the address is saved in `noctalia.pluginDataDir()/doorbell.json`. The
 `noctalia-frigate-doorbell` Secret Service entry holds its credentials; passwords
-are sent in the native login request body, never shell arguments or URL parameters.
+are used in native HTTP authentication, never shell arguments or URL parameters.
 
 Click the icon to toggle the viewer. Use the arrow buttons or **Left / Right**
 keys to cycle, including wraparound. Native controls support keyboard focus;
@@ -203,6 +202,8 @@ changes; reload configuration after editing the manifest.
 noctalia plugins lint .
 lua tests/service.lua
 lua tests/doorbell.lua
+lua tests/wssecurity.lua
+lua tests/onvif_xml.lua
 lua tests/ui.lua
 bash tests/credentials.sh
 bash -n Credentials.sh

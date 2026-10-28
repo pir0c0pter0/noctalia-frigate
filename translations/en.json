@@ -9,6 +9,7 @@
   "doorbellDisabled": "Automatic opening is disabled.",
   "doorbellConnecting": "Connecting to the doorbell…",
   "doorbellListening": "Waiting for the doorbell button.",
+  "doorbellFallback": "Event connection unavailable; checking the button periodically while retrying. Some presses may be missed.",
   "doorbellCredentialsMissing": "Save the doorbell's own username and password using Credentials below.",
   "doorbellAuthFailed": "Doorbell login failed. Check its credentials and try again.",
   "doorbellUnavailable": "Doorbell unreachable. Check that HTTP/HTTPS access is enabled. Retrying automatically.",
