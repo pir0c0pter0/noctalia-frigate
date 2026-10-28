@@ -105,7 +105,7 @@ local function sameHost(value)
 end
 
 local function fallback()
-    mode, eventsUrl, subscriptionUrl = "fallback", "", ""
+    mode, eventsUrl, subscriptionUrl, renewAt = "fallback", "", "", 0
     retryOnvifAt, nextPollAt = noctalia.nowMs() + 60000, 0
     status = "doorbellFallback"
     noctalia.log("doorbell: ONVIF unavailable; using polling")

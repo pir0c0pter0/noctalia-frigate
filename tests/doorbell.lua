@@ -263,6 +263,62 @@ test("long polling leaves time to renew before the subscription deadline", funct
     assert(h.requests[#h.requests].request.body:find('<wsnt:Renew>', 1, true))
 end)
 
+test("ONVIF remains active through 24 simulated hours and repeated renewals", function()
+    local h = boot('http://doorbell.example.com', true)
+    subscribed(h)
+    local elapsed, renewals, presses = 0, 0, 0
+    while elapsed < 86400000 do
+        local body = h.requests[#h.requests].request.body
+        if body:find('<wsnt:Renew>', 1, true) then
+            renewals = renewals + 1
+            h:reply(envelope('<wsnt:RenewResponse>' .. times .. '</wsnt:RenewResponse>'))
+        else
+            local wait = assert(tonumber(body:match('<tev:Timeout>PT(%d+)S</tev:Timeout>'))) * 1000
+            h:tick(wait)
+            elapsed = elapsed + wait
+            local messages = ''
+            if elapsed >= (presses + 1) * 3600000 then
+                presses = presses + 1
+                messages = eventMessage('Changed', 'false') .. eventMessage('Changed', 'true')
+            end
+            h:reply(envelope('<tev:PullMessagesResponse>' .. times .. messages .. '</tev:PullMessagesResponse>'))
+        end
+    end
+    assert(presses == 24 and h.rings == 24 and renewals > 1000)
+    assert(h.shared.doorbell.status == 'doorbellListening')
+end)
+
+test("oversized ONVIF response falls back and retries the event subscription", function()
+    local h = boot('http://doorbell.example.com', true)
+    subscribed(h)
+    h:reply(string.rep('x', 262145))
+    assert(h.shared.doorbell.status == 'doorbellFallback')
+    h:tick(60000)
+    assert(h.requests[#h.requests].request.url:find('/onvif/device_service', 1, true))
+end)
+
+test("ONVIF resumes after repeated network failures", function()
+    local h = boot('http://doorbell.example.com', true)
+    subscribed(h)
+    h:reply('', 0, false)
+    for _ = 1, 3 do
+        assert(h.shared.doorbell.status == 'doorbellFallback')
+        h:tick(60000)
+        assert(h.requests[#h.requests].request.url:find('/onvif/device_service', 1, true))
+        h:reply('', 0, false)
+    end
+    h:tick(60000)
+    h:reply(envelope('<tds:GetCapabilitiesResponse><tds:Capabilities><tt:Events>'
+        .. '<tt:XAddr>http://doorbell.example.com:8000/onvif/events</tt:XAddr>'
+        .. '</tt:Events></tds:Capabilities></tds:GetCapabilitiesResponse>'))
+    h:reply(envelope('<tev:CreatePullPointSubscriptionResponse><tev:SubscriptionReference>'
+        .. '<wsa:Address>http://doorbell.example.com:8000/onvif/sub</wsa:Address>'
+        .. '</tev:SubscriptionReference>' .. times .. '</tev:CreatePullPointSubscriptionResponse>'))
+    h:reply(envelope('<tev:PullMessagesResponse>' .. times .. eventMessage('Changed', 'true')
+        .. '</tev:PullMessagesResponse>'))
+    assert(h.rings == 1 and h.shared.doorbell.status == 'doorbellListening')
+end)
+
 test("a CGI authentication failure does not prevent the next ONVIF attempt", function()
     local h = boot('http://doorbell.example.com')
     h:credentials()
@@ -341,6 +397,14 @@ test("only button edges ring; initial active state and motion do not open the vi
     h:tick(); h:event(0)
     h:tick(); h:event(1)
     assert(h.rings == 2)
+end)
+
+test("fallback cannot observe a press that starts and ends between polls", function()
+    local h = connected()
+    h:event(0)
+    h:tick(2000)
+    h:event(0)
+    assert(h.rings == 0 and h.shared.doorbell.status == 'doorbellFallback')
 end)
 
 test("background polling stays single-flight and recovers with bounded backoff", function()
