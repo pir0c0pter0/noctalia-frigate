@@ -50,6 +50,7 @@ local savedSnapshot = ""
 local username, password = "", ""
 local credentialsReady = false
 local credentialGeneration = 0
+local credentialRetryAt = nil
 local baseUrl = ""
 local urlError = ""
 local urlDraft = serverUrl
@@ -361,6 +362,7 @@ end
 
 local function loadCredentials()
     credentialGeneration = credentialGeneration + 1
+    credentialRetryAt = nil
     local generation = credentialGeneration
     credentialsReady = false
     username, password = "", ""
@@ -385,7 +387,7 @@ local function loadCredentials()
             remaining = remaining - 1
             if remaining == 0 then
                 credentialsReady = not failed
-                if failed then problem = "keyringFailed"; publish(); return end
+                if failed then credentialRetryAt = noctalia.nowMs() + 5000; problem = "keyringFailed"; publish(); return end
                 connect()
             end
         end
@@ -416,6 +418,7 @@ end
 function update()
     local now = noctalia.nowMs()
     if urlApplyAt and now >= urlApplyAt then applyUrl() end
+    if credentialRetryAt and now >= credentialRetryAt and not stopped then loadCredentials() end
     if credentialsReady and now >= nextHealthAt then health() end
     requestFrame()
 end

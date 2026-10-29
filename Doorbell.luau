@@ -16,6 +16,7 @@ local flight = 0
 local previous = nil
 local mode, eventsUrl, subscriptionUrl = "discover", "", ""
 local renewAt, retryOnvifAt = 0, 0
+local credentialRetryAt = nil
 local haveChanged = false
 
 local function normalizeUrl(value)
@@ -39,13 +40,14 @@ end
 
 local function loadCredentials()
     generation = generation + 1
+    credentialRetryAt = nil
     local current = generation
     ready, failures, nextPollAt = false, 0, 0
     mode, eventsUrl, subscriptionUrl, renewAt, retryOnvifAt = "discover", "", "", 0, 0
     if url == "" then status = "doorbellDisabled"; publish(); return end
     status = "doorbellConnecting"
     publish()
-    if not noctalia.commandExists("secret-tool") then status = "keyringFailed"; publish(); return end
+    if not noctalia.commandExists("secret-tool") then credentialRetryAt = noctalia.nowMs() + 5000; status = "keyringFailed"; publish(); return end
     local remaining, failed = 2, false
     local loaded = {}
     for _, key in ipairs({ "username", "password" }) do
@@ -65,6 +67,7 @@ local function loadCredentials()
                     username, password = nextUsername, nextPassword
                 end
                 ready = not failed and username ~= "" and password ~= ""
+                if failed then credentialRetryAt = noctalia.nowMs() + 5000 end
                 status = failed and "keyringFailed" or (ready and "doorbellConnecting" or "doorbellCredentialsMissing")
                 publish()
             end
@@ -350,6 +353,7 @@ local function applyUrl()
     draft = nil
     if normalized == url and normalized ~= "" then return end
     generation = generation + 1
+    credentialRetryAt = nil
     ready = false
     previous = nil
     username, password, token = "", "", ""
@@ -368,6 +372,7 @@ end
 function update()
     if not alive then return end
     if applyAt and noctalia.nowMs() >= applyAt then applyUrl() end
+    if credentialRetryAt and noctalia.nowMs() >= credentialRetryAt then loadCredentials() end
     if mode == "fallback" and noctalia.nowMs() >= retryOnvifAt and not inFlight then
         mode = "discover"
         ready = username ~= "" and password ~= ""
