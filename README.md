@@ -111,6 +111,25 @@ Only the address is saved in `noctalia.pluginDataDir()/doorbell.json`. The
 `noctalia-frigate-doorbell` Secret Service entry holds its credentials; passwords
 are used in native HTTP authentication, never shell arguments or URL parameters.
 
+### Send audio to the doorbell
+
+Configure a go2rtc stream with a working two-way audio backchannel for the
+doorbell. In **Settings → Doorbell audio (go2rtc)**, enter the go2rtc server's
+direct HTTP/HTTPS address, the stream name, and the absolute path to a local
+audio file (up to 10 MB). Press **Send audio to doorbell** or the speaker button
+in the viewer. The file is played
+once; prepare repeated messages in the file itself. A successful request means
+go2rtc accepted playback, not that the camera's speaker was audible.
+
+The plugin uses Python 3 to serve the selected file for at most 30 seconds on
+the network interface used to reach go2rtc. Only requests from the configured
+server's resolved IPv4 address are accepted. The server must be able to connect
+back to this computer and have FFmpeg available; firewalls, proxies, NAT,
+IPv6-only setups, and isolated containers may prevent that connection. The
+temporary file transfer uses HTTP and is intended for a trusted local network.
+The go2rtc API must be accessible without separate authentication; do not put
+credentials in its address. Audio is sent manually, not on every ring.
+
 Click the icon to toggle the viewer. Use the arrow buttons or **Left / Right**
 keys to cycle, including wraparound. Native controls support keyboard focus;
 theme, scale, hover feedback, tooltips, placement and outside-click dismissal
@@ -202,6 +221,8 @@ changes; reload configuration after editing the manifest.
 noctalia plugins lint .
 lua tests/service.lua
 lua tests/doorbell.lua
+lua tests/audio.lua
+python3 tests/audio-server.py
 lua tests/wssecurity.lua
 lua tests/onvif_xml.lua
 lua tests/ui.lua

@@ -7,7 +7,7 @@ license = "MIT"
 icon = "device-cctv"
 description = "Live Frigate camera snapshots in a native Noctalia panel."
 tags = ["camera", "security"]
-dependencies = ["bash", "secret-tool"]
+dependencies = ["bash", "secret-tool", "python3"]
 
 [[service]]
 id = "service"
@@ -16,6 +16,10 @@ entry = "Main.luau"
 [[service]]
 id = "doorbell"
 entry = "Doorbell.luau"
+
+[[service]]
+id = "audio"
+entry = "Audio.luau"
 
 [[widget]]
 id = "bar"

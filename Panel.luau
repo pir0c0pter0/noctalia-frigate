@@ -2,6 +2,7 @@
 local tr = noctalia.tr
 local view = noctalia.state.get("viewer") or {}
 local doorbell = noctalia.state.get("doorbell") or {}
+local audio = noctalia.state.get("audio") or {}
 local opened = false
 local page = "viewer"
 local render
@@ -96,6 +97,10 @@ local function viewerPage()
         ui.glyph({ name = "device-cctv", color = view.connected and "primary" or "on_surface_variant" }),
         ui.label({ text = title, fontWeight = "bold", maxLines = 1, flexGrow = 1 }),
     }
+    if audio.url and audio.url ~= "" and audio.stream and audio.stream ~= "" and audio.file and audio.file ~= "" then
+        table.insert(header, ui.button({ key = "audioSend", glyph = "volume", variant = "ghost", tooltip = tr("audioPlay"),
+            enabled = not audio.busy, onClick = function() noctalia.state.set("audioCommand", { action = "play" }) end }))
+    end
     if #selected > 1 then
         table.insert(header, ui.label({ text = tostring(view.index or 1) .. " / " .. tostring(#selected), color = "on_surface_variant" }))
         table.insert(header, ui.button({ glyph = "chevron-left", variant = "ghost", tooltip = tr("previousCamera"),
@@ -122,6 +127,9 @@ local function viewerPage()
         tooltip = saved ~= "" and tr("snapshotSaved", { path = saved }) or tr("saveSnapshot"),
         enabled = not view.savingSnapshot, onClick = function() command("snapshot") end }) or nil
     table.insert(content, statusRow(snapshot))
+    if audio.status == "audioFailed" or audio.status == "audioFileInvalid" or audio.status == "audioConfigInvalid" or audio.status == "audioUnavailable" then
+        table.insert(content, ui.label({ text = tr(audio.status), maxLines = 3, color = "error" }))
+    end
     if view.message and view.message ~= "" then
         table.insert(content, ui.label({ text = tr(view.message), maxLines = 2, color = "error" }))
     end
@@ -180,6 +188,18 @@ local function settingsPage()
         }),
     })
 
+    local audioSettings = section(tr("audioTitle"), {
+        ui.input({ key = "audioUrl", value = audio.url or "", placeholder = "http://go2rtc.local:1984",
+            onChange = function(value) noctalia.state.set("audioCommand", { action = "url", value = value }) end }),
+        ui.input({ key = "audioStream", value = audio.stream or "", placeholder = tr("audioStreamHint"),
+            onChange = function(value) noctalia.state.set("audioCommand", { action = "stream", value = value }) end }),
+        ui.input({ key = "audioFile", value = audio.file or "", placeholder = tr("audioFileHint"),
+            onChange = function(value) noctalia.state.set("audioCommand", { action = "file", value = value }) end }),
+        ui.button({ key = "audioPlay", glyph = "volume", text = tr("audioPlay"), enabled = not audio.busy,
+            onClick = function() noctalia.state.set("audioCommand", { action = "play" }) end }),
+        ui.label({ text = tr(audio.status or "audioIdle"), maxLines = 3, color = "on_surface_variant" }),
+    })
+
     local list = {
         ui.row({ gap = 8, align = "center" }, {
             ui.label({ text = tr("camerasSelected", { count = #selected }), color = "on_surface_variant", flexGrow = 1 }),
@@ -202,7 +222,7 @@ local function settingsPage()
     return {
         headerButtons(header),
         ui.scroll({ key = "settings", flexGrow = 1, gap = 20 }, {
-            server, main, bell, section(tr("visibleCameras"), list),
+            server, main, bell, audioSettings, section(tr("visibleCameras"), list),
         }),
     }
 end
@@ -221,6 +241,11 @@ end)
 noctalia.state.watch("doorbell", function(value)
     doorbell = value or {}
     if page == "settings" then render() end
+end)
+
+noctalia.state.watch("audio", function(value)
+    audio = value or {}
+    render()
 end)
 
 -- The bar's right click asks for the settings page, even while already open.
