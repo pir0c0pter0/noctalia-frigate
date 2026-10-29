@@ -5,6 +5,8 @@ import subprocess
 import tempfile
 import time
 import urllib.request
+import importlib.util
+from unittest.mock import patch
 
 
 with tempfile.TemporaryDirectory() as directory:
@@ -29,3 +31,20 @@ with tempfile.TemporaryDirectory() as directory:
             process.kill()
             process.wait()
 print("audio server checks passed")
+
+spec = importlib.util.spec_from_file_location("audio_server", "AudioServer.py")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+with tempfile.TemporaryDirectory() as directory:
+    clip = Path(directory) / "clip.ogg"
+    info = Path(directory) / "server.json"
+    clip.write_bytes(b"audio\x00contents")
+    Path(str(info) + ".done").touch()
+    with patch.object(module.subprocess, "run") as run:
+        run.return_value.returncode = 0
+        assert module.serve_over_ssh(str(clip), str(info), "ssh:server:/srv/frigate/config") == 0
+        assert run.call_count == 2
+        assert run.call_args_list[0].kwargs["input"] == clip.read_bytes()
+        assert not info.exists() and not Path(str(info) + ".done").exists()
+    assert module.serve_over_ssh(str(clip), str(info), "ssh:server:relative") == 1
+print("SSH audio transfer checks passed")

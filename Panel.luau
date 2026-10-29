@@ -191,6 +191,8 @@ local function settingsPage()
     local audioSettings = section(tr("audioTitle"), {
         ui.input({ key = "audioUrl", value = audio.url or "", placeholder = "http://go2rtc.local:1984",
             onChange = function(value) noctalia.state.set("audioCommand", { action = "url", value = value }) end }),
+        ui.input({ key = "audioPeer", value = audio.peer or "", placeholder = tr("audioPeerHint"),
+            onChange = function(value) noctalia.state.set("audioCommand", { action = "peer", value = value }) end }),
         ui.input({ key = "audioStream", value = audio.stream or "", placeholder = tr("audioStreamHint"),
             onChange = function(value) noctalia.state.set("audioCommand", { action = "stream", value = value }) end }),
         ui.input({ key = "audioFile", value = audio.file or "", placeholder = tr("audioFileHint"),

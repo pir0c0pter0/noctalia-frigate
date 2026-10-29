@@ -7,6 +7,7 @@
   "doorbellTitle": "Reolink doorbell",
   "audioTitle": "Doorbell audio (go2rtc)",
   "audioStreamHint": "Stream name with two-way audio",
+  "audioPeerHint": "Server address or ssh:host:/path/config (optional)",
   "audioFileHint": "Absolute path to audio file",
   "audioPlay": "Send audio to doorbell",
   "audioIdle": "Configure go2rtc, the stream and the audio file. Audio is sent on a detected ring.",

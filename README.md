@@ -124,9 +124,13 @@ go2rtc accepted playback, not that the camera's speaker was audible.
 The plugin uses Python 3 to serve the selected file for at most 30 seconds on
 the network interface used to reach go2rtc. Only requests from the configured
 server's resolved IPv4 address are accepted. The server must be able to connect
-back to this computer and have FFmpeg available; firewalls, proxies, NAT,
-IPv6-only setups, and isolated containers may prevent that connection. The
-temporary file transfer uses HTTP and is intended for a trusted local network.
+back. If using an SSH tunnel for the API, the optional server address can name
+the host's IPv4 address or be `ssh:host:/absolute/path/to/frigate/config`.
+The latter copies the file via noninteractive SSH into the Frigate config mount
+and removes it after playback starts; a remote cleanup also removes it after
+60 seconds if the plugin is interrupted. Frigate must mount that directory at
+`/config`. FFmpeg is required in go2rtc. The temporary HTTP transfer is intended
+for a trusted local network.
 The go2rtc API must be accessible without separate authentication; do not put
 credentials in its address. When configured, the audio is also sent once for
 each detected doorbell press. Detection may miss presses while disconnected or
