@@ -15,6 +15,7 @@ local api = {
     runAsync = function(argv, cb) commands[#commands + 1] = { argv = argv, cb = cb }; return true end,
     http = function(req, cb) requests[#requests + 1] = { req = req, cb = cb }; return true end,
     tr = function(k) return k end,
+    log = function() end,
     notifyError = function(_, msg) state.notification = msg end,
     json = { encode = function(v) json.value = v; return "encoded" end,
         decode = function(v) if v == "encoded" then return json.value end; return v end },
@@ -41,7 +42,10 @@ assert(requests[1].req.url:find("ffmpeg%%3Ahttp%%3A", 1) and requests[1].req.url
 requests[1].cb({ ok = true, status = 200 })
 assert(state.audio.status == "audioSent")
 commands[1].cb({ exitCode = 0 })
+api.state.set("command", { action = "ring" })
+assert(#commands == 2 and state.audio.status == "audioStarting", "doorbell ring starts playback")
+commands[2].cb({ exitCode = 1 })
 cmd("file", "/missing.ogg")
 cmd("play")
-assert(state.audio.status == "audioFileInvalid" and #commands == 1)
+assert(state.audio.status == "audioFileInvalid" and #commands == 2)
 print("audio checks passed")

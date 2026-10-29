@@ -9,7 +9,7 @@
   "audioStreamHint": "Nome do stream com áudio bidirecional",
   "audioFileHint": "Caminho absoluto do arquivo de áudio",
   "audioPlay": "Enviar áudio para a campainha",
-  "audioIdle": "Configure o go2rtc, o stream e o arquivo de áudio.",
+  "audioIdle": "Configure o go2rtc, o stream e o arquivo. O áudio será enviado ao detectar um toque.",
   "audioStarting": "Preparando o envio de áudio…",
   "audioSent": "Reprodução solicitada ao go2rtc.",
   "audioConfigInvalid": "Confira o endereço do go2rtc e o nome do stream.",

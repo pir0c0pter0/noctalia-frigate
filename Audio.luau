@@ -98,6 +98,13 @@ state.watch("audioCommand", function(command)
     persist(); publish()
 end)
 
+state.watch("command", function(command)
+    if type(command) == "table" and command.action == "ring" then
+        noctalia.log("audio: doorbell event received")
+        play()
+    end
+end)
+
 function onExit()
     alive = false
     serial = serial + 1

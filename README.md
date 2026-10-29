@@ -128,7 +128,9 @@ back to this computer and have FFmpeg available; firewalls, proxies, NAT,
 IPv6-only setups, and isolated containers may prevent that connection. The
 temporary file transfer uses HTTP and is intended for a trusted local network.
 The go2rtc API must be accessible without separate authentication; do not put
-credentials in its address. Audio is sent manually, not on every ring.
+credentials in its address. When configured, the audio is also sent once for
+each detected doorbell press. Detection may miss presses while disconnected or
+using the polling fallback.
 
 Click the icon to toggle the viewer. Use the arrow buttons or **Left / Right**
 keys to cycle, including wraparound. Native controls support keyboard focus;
