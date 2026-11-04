@@ -121,6 +121,8 @@ in the viewer. The file is played
 once; prepare repeated messages in the file itself. A successful request means
 go2rtc accepted playback, not that the camera's speaker was audible.
 The included `ja-vai-repetido.ogg` says “já vai” twice with a two-second gap.
+It ends with two seconds of silence to keep the backchannel open while the
+doorbell finishes playing its buffered audio.
 
 The plugin uses Python 3 to serve the selected file for at most 30 seconds on
 the network interface used to reach go2rtc. Only requests from the configured
