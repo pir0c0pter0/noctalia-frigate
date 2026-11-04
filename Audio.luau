@@ -13,6 +13,7 @@ local peer = type(saved.peer) == "string" and saved.peer or ""
 local status, busy, requested, alive = "audioIdle", false, false, true
 local serverDone, httpDone = false, false
 local serial, startedAt = 0, 0
+local ringAt = nil
 
 local function publish()
     state.set("audio", { url = url, stream = stream, file = file, peer = peer, status = status, busy = busy })
@@ -36,6 +37,7 @@ end
 
 local function play()
     if busy then return end
+    ringAt = nil
     local info = file:sub(1, 1) == "/" and noctalia.fileInfo(file)
     local sshPeer = peer:match("^ssh:[%w%.%-_]+:/[%w%._%-%/]+$")
     if not validUrl(url) or stream == "" or (peer ~= "" and not peer:match("^[%w%.%-]+$") and not sshPeer) then status = "audioConfigInvalid"
@@ -64,7 +66,9 @@ local function play()
 end
 
 function update()
-    if not alive or not busy or requested then return end
+    if not alive then return end
+    if ringAt and noctalia.nowMs() >= ringAt then play() end
+    if not busy or requested then return end
     local text = noctalia.readFile(infoPath)
     local info = text and noctalia.json.decode(text)
     local source = type(info) == "table" and ((type(info.url) == "string" and info.url:match("^http://[%d%.]+:%d+/clip$") and info.url)
@@ -115,7 +119,8 @@ end)
 state.watch("command", function(command)
     if type(command) == "table" and command.action == "ring" then
         noctalia.log("audio: doorbell event received")
-        play()
+        -- Let the doorbell finish its own chime before opening the backchannel.
+        if not busy and not ringAt then ringAt = noctalia.nowMs() + 4000 end
     end
 end)
 

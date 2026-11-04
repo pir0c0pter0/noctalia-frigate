@@ -120,6 +120,7 @@ audio file (up to 10 MB). Press **Send audio to doorbell** or the speaker button
 in the viewer. The file is played
 once; prepare repeated messages in the file itself. A successful request means
 go2rtc accepted playback, not that the camera's speaker was audible.
+The included `ja-vai-repetido.ogg` says “já vai” twice with a two-second gap.
 
 The plugin uses Python 3 to serve the selected file for at most 30 seconds on
 the network interface used to reach go2rtc. Only requests from the configured
@@ -133,8 +134,10 @@ and removes it after playback starts; a remote cleanup also removes it after
 for a trusted local network.
 The go2rtc API must be accessible without separate authentication; do not put
 credentials in its address. When configured, the audio is also sent once for
-each detected doorbell press. Detection may miss presses while disconnected or
-using the polling fallback.
+each detected doorbell press, after a four-second delay to let the camera's own
+chime finish. Repeated presses while waiting or sending do not queue another
+response. Manual playback starts immediately. Detection may miss presses while
+disconnected or using the polling fallback.
 
 Click the icon to toggle the viewer. Use the arrow buttons or **Left / Right**
 keys to cycle, including wraparound. Native controls support keyboard focus;
